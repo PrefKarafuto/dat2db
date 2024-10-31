@@ -76,7 +76,19 @@ foreach ($board_dirs as $board_dir) {
                 // Shift-JISからUTF-8に変換
                 $line = mb_convert_encoding(trim($line), 'UTF-8', 'SJIS');
                 
-                list($name, $mail, $datetime_id, $message, $title) = explode('<>', $line);
+                // データを分割し、期待する要素数が揃っているか確認
+                $parts = explode('<>', $line);
+
+                if (count($parts) === 5) {
+                    list($name, $mail, $datetime_id, $message, $title) = $parts;
+                } else {
+                    // 必要な要素数が揃っていない場合、適切な値を設定
+                    $name = $parts[0] ?? '';            // 必要に応じて空文字列を設定
+                    $mail = $parts[1] ?? '';
+                    $datetime_id = $parts[2] ?? '';
+                    $message = $parts[3] ?? '';
+                    $title = $parts[4] ?? '';           // タイトルがない場合は空文字列
+                }
 
                 // datetime_idを`date`, `time`, `id`に分割
                 // 'ID:'で分割し、配列に要素が2つあるか確認
