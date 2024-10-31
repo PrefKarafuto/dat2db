@@ -11,9 +11,10 @@ $db->exec("CREATE TABLE IF NOT EXISTS Boards (
 
 $db->exec("CREATE TABLE IF NOT EXISTS Threads (
     board_id TEXT,
-    thread_id INTEGER PRIMARY KEY,
+    thread_id INTEGER,
     title TEXT,
     response_count INTEGER DEFAULT 0,
+    PRIMARY KEY (board_id, thread_id),
     FOREIGN KEY (board_id) REFERENCES Boards(board_id)
 )");
 
@@ -27,7 +28,8 @@ $db->exec("CREATE TABLE IF NOT EXISTS Posts (
     time TEXT,
     id TEXT,
     message TEXT,
-    FOREIGN KEY (board_id) REFERENCES Boards(board_id)
+    PRIMARY KEY (board_id, thread_id, post_order),
+    FOREIGN KEY (board_id, thread_id) REFERENCES Threads(board_id, thread_id)
 )");
 
 // 全フォルダと全ファイルを読み込み
@@ -60,8 +62,11 @@ foreach ($board_dirs as $board_dir) {
         echo "$board_id 内にdatファイルが存在しません。\n";
         continue;
     } else {
-        echo "掲示版: $board_id を読み込み中・・・";
+        echo "掲示板: $board_id を読み込み中・・・\n";
     }
+
+    // トランザクションの開始
+    $db->exec('BEGIN TRANSACTION');
 
     foreach ($thread_files as $thread_file) {
         $thread_id = basename($thread_file, '.dat'); // ファイル名からスレッドID（UNIXタイム）を取得
@@ -71,47 +76,39 @@ foreach ($board_dirs as $board_dir) {
         // ファイルを開いて各行を読み込み
         if (file_exists($thread_file)) {
             $file = fopen($thread_file, 'r');
-            
+
             while (($line = fgets($file)) !== false) {
                 // Shift-JISからUTF-8に変換
                 $line = mb_convert_encoding(trim($line), 'UTF-8', 'SJIS');
-                
+
                 // データを分割し、期待する要素数が揃っているか確認
                 $parts = explode('<>', $line);
 
-                if (count($parts) === 5) {
-                    list($name, $mail, $datetime_id, $message, $title) = $parts;
-                } else {
-                    // 必要な要素数が揃っていない場合、適切な値を設定
-                    $name = $parts[0] ?? '';            // 必要に応じて空文字列を設定
+                if (count($parts) >= 4) {
+                    $name = $parts[0] ?? '';
                     $mail = $parts[1] ?? '';
                     $datetime_id = $parts[2] ?? '';
                     $message = $parts[3] ?? '';
-                    $title = $parts[4] ?? '';           // タイトルがない場合は空文字列
+                    $title = $parts[4] ?? ''; // タイトルは最初の投稿のみ存在する可能性がある
+                } else {
+                    // フォーマットが不正な場合はスキップ
+                    continue;
                 }
 
                 // datetime_idを`date`, `time`, `id`に分割
-                // 'ID:'で分割し、配列に要素が2つあるか確認
-                $parts = explode(' ID:', $datetime_id);
-                if (count($parts) === 2) {
-                    list($date_time, $id) = $parts;
-                    
-                    // ' 'で分割し、配列に要素が2つあるか確認
-                    $date_parts = explode(' ', $date_time);
-                    if (count($date_parts) === 2) {
-                        list($date, $time) = $date_parts;
-                    } else {
-                        // ' 'での分割が期待通りでない場合の処理
-                        $date = $date_time;
-                        $time = ''; // 空の値に設定
-                    }
-                } else {
-                    // ' ID:'での分割が期待通りでない場合の処理
-                    $date_time = $datetime_id;
-                    $id = ''; // 空の値に設定
-                    $date = $datetime_id;
-                    $time = '';
-                }
+                $id = '';
+                $date = '';
+                $time = '';
+
+                // ' ID:'で分割
+                $parts_datetime = explode(' ID:', $datetime_id);
+                $date_time_str = $parts_datetime[0] ?? '';
+                $id = $parts_datetime[1] ?? '';
+
+                // ' 'で日付と時間を分割
+                $date_time_parts = explode(' ', $date_time_str);
+                $date = $date_time_parts[0] ?? '';
+                $time = $date_time_parts[1] ?? '';
 
                 // 最初の投稿からタイトルとレス数を設定
                 if ($first_post) {
@@ -146,7 +143,7 @@ foreach ($board_dirs as $board_dir) {
 
             // Threadsテーブルのresponse_countを更新
             $stmt = $db->prepare("UPDATE Threads SET response_count = :response_count WHERE board_id = :board_id AND thread_id = :thread_id");
-            $stmt->bindValue(':response_count', $post_order, SQLITE3_INTEGER); // 総レス数
+            $stmt->bindValue(':response_count', $post_order - 1, SQLITE3_INTEGER); // 総レス数（$post_orderは最後にインクリメントされているため）
             $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
             $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
             $stmt->execute();
@@ -159,8 +156,12 @@ foreach ($board_dirs as $board_dir) {
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt->execute();
 
-    echo "$thread_count/$thread_num 完了\n";
+    // トランザクションのコミット
+    $db->exec('COMMIT');
+
+    echo "$board_id: $thread_count/$thread_num スレッドの読み込みが完了しました。\n";
 }
 
 $db->close();
 echo "データベースへの移行が完了しました。\n";
+?>
