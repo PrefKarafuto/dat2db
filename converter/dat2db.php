@@ -5,13 +5,15 @@ $db = new SQLite3('bbs_log.db');
 // 各テーブルの作成
 $db->exec("CREATE TABLE IF NOT EXISTS Boards (
     board_id TEXT PRIMARY KEY,
-    board_name TEXT UNIQUE
+    board_name TEXT UNIQUE,
+    thread_count INTEGER DEFAULT 0
 )");
 
-$db->exec("CREATE TABLE IF NOT EXISTS Titles (
+$db->exec("CREATE TABLE IF NOT EXISTS Threads (
     board_id TEXT,
     thread_id INTEGER PRIMARY KEY,
     title TEXT,
+    response_count INTEGER DEFAULT 0,
     FOREIGN KEY (board_id) REFERENCES Boards(board_id)
 )");
 
@@ -41,22 +43,23 @@ if (empty($board_dirs)) {
 foreach ($board_dirs as $board_dir) {
     $board_id = basename($board_dir); // フォルダ名をboard_idとする
     $board_name = $board_id; // 必要に応じて掲示板名を別に設定可能
+    $thread_count = 0; // スレッド数の初期化
 
     // Boardsテーブルに掲示板名を挿入（存在しない場合のみ）
-    $stmt = $db->prepare("INSERT OR IGNORE INTO Boards (board_id, board_name) VALUES (:board_id, :board_name)");
+    $stmt = $db->prepare("INSERT OR IGNORE INTO Boards (board_id, board_name, thread_count) VALUES (:board_id, :board_name, :thread_count)");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt->bindValue(':board_name', $board_name, SQLITE3_TEXT);
+    $stmt->bindValue(':thread_count', $thread_count, SQLITE3_INTEGER);
     $stmt->execute();
 
     // 各フォルダ内の全.datファイルを読み込み
     $thread_files = glob("$board_dir/*.dat");
     $thread_num = count($thread_files);
-    $process_count = 0;
 
-    if (empty ($thread_files)) {
+    if (empty($thread_files)) {
         echo "$board_id 内にdatファイルが存在しません。\n";
         continue;
-    } else{
+    } else {
         echo "掲示版: $board_id を読み込み中・・・";
     }
 
@@ -79,15 +82,17 @@ foreach ($board_dirs as $board_dir) {
                 list($date_time, $id) = explode(' ID:', $datetime_id);
                 list($date, $time) = explode(' ', $date_time);
 
-                // 最初の投稿からタイトルを保存
+                // 最初の投稿からタイトルとレス数を設定
                 if ($first_post) {
-                    $stmt = $db->prepare("INSERT INTO Titles (board_id, thread_id, title)
-                                          VALUES (:board_id, :thread_id, :title)");
+                    $stmt = $db->prepare("INSERT INTO Threads (board_id, thread_id, title, response_count)
+                                          VALUES (:board_id, :thread_id, :title, :response_count)");
                     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
                     $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
                     $stmt->bindValue(':title', $title, SQLITE3_TEXT);
+                    $stmt->bindValue(':response_count', 1, SQLITE3_INTEGER);
                     $stmt->execute();
                     $first_post = false;
+                    $thread_count++; // スレッド数をカウント
                 }
 
                 // データベースに投稿を挿入
@@ -107,10 +112,23 @@ foreach ($board_dirs as $board_dir) {
                 $post_order++;
             }
             fclose($file);
-            $process_count++;
+
+            // Threadsテーブルのresponse_countを更新
+            $stmt = $db->prepare("UPDATE Threads SET response_count = :response_count WHERE board_id = :board_id AND thread_id = :thread_id");
+            $stmt->bindValue(':response_count', $post_order, SQLITE3_INTEGER); // 総レス数
+            $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+            $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
+            $stmt->execute();
         }
     }
-    echo "$process_count/$thread_num 完了\n";
+
+    // Boardsテーブルのthread_countを更新
+    $stmt = $db->prepare("UPDATE Boards SET thread_count = :thread_count WHERE board_id = :board_id");
+    $stmt->bindValue(':thread_count', $thread_count, SQLITE3_INTEGER); // 総スレッド数
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $stmt->execute();
+
+    echo "$thread_count/$thread_num 完了\n";
 }
 
 $db->close();
