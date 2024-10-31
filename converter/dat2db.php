@@ -1,6 +1,6 @@
 <?php
 // データベース接続の設定
-$db = new SQLite3('bbs_log.db');
+$db = new SQLite3('../bbs_log.db');
 
 // 各テーブルの作成
 $db->exec("CREATE TABLE IF NOT EXISTS Boards (

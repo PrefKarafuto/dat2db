@@ -1,6 +1,6 @@
 <?php
 // データベースファイルの確認
-$db_file = 'bbs_log.db';
+$db_file = '../bbs_log.db';
 if (!file_exists($db_file)) {
     echo "エラー: データベースファイル '{$db_file}' が存在しません。\n";
     exit;
