@@ -79,12 +79,31 @@ foreach ($board_dirs as $board_dir) {
                 list($name, $mail, $datetime_id, $message, $title) = explode('<>', $line);
 
                 // datetime_idを`date`, `time`, `id`に分割
-                list($date_time, $id) = explode(' ID:', $datetime_id);
-                list($date, $time) = explode(' ', $date_time);
+                // 'ID:'で分割し、配列に要素が2つあるか確認
+                $parts = explode(' ID:', $datetime_id);
+                if (count($parts) === 2) {
+                    list($date_time, $id) = $parts;
+                    
+                    // ' 'で分割し、配列に要素が2つあるか確認
+                    $date_parts = explode(' ', $date_time);
+                    if (count($date_parts) === 2) {
+                        list($date, $time) = $date_parts;
+                    } else {
+                        // ' 'での分割が期待通りでない場合の処理
+                        $date = $date_time;
+                        $time = ''; // 空の値に設定
+                    }
+                } else {
+                    // ' ID:'での分割が期待通りでない場合の処理
+                    $date_time = $datetime_id;
+                    $id = ''; // 空の値に設定
+                    $date = $datetime_id;
+                    $time = '';
+                }
 
                 // 最初の投稿からタイトルとレス数を設定
                 if ($first_post) {
-                    $stmt = $db->prepare("INSERT INTO Threads (board_id, thread_id, title, response_count)
+                    $stmt = $db->prepare("INSERT OR REPLACE INTO Threads (board_id, thread_id, title, response_count)
                                           VALUES (:board_id, :thread_id, :title, :response_count)");
                     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
                     $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);

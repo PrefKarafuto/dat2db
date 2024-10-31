@@ -2,6 +2,7 @@
 2ch/5chのdat形式のログからSQLite3のデータベース形式に変換するツール
 
 ## 使い方
+php.iniでmbstring,sqlite3が有効になっていることを確認する。  
 converter/datsフォルダに/[dirname]/xxx.datの形でデータを置く。dirnameは英数のみ。
 
 ### コマンドライン
