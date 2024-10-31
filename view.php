@@ -552,17 +552,66 @@ function getLastPostOrders($db, $board_id, $thread_id, $count) {
 // レスを表示する関数
 function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') {
     echo "<div class='response'>";
-    echo "<p><strong>" . htmlspecialchars($row['post_order'], ENT_QUOTES, 'UTF-8') . " - " . htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8');
+    echo "<p><strong>" . $row['post_order'] . " - " . $row['name'];
     if (!empty($row['mail'])) {
-        echo " (<a href='mailto:" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "'>" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "</a>)";
+        echo " (<a href='mailto:" . $row['mail'] . "'>" . $row['mail'] . "</a>)";
     }
     echo "</strong></p>";
-    echo "<p>" . htmlspecialchars($row['date'], ENT_QUOTES, 'UTF-8') . " " . htmlspecialchars($row['time'], ENT_QUOTES, 'UTF-8');
+    echo "<p>" . $row['date'] . " " . $row['time'];
     if (!empty($row['id'])) {
-        echo " ID:" . htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8');
+        echo " ID:" . $row['id'];
     }
     echo "</p>";
-    echo "<p>" . nl2br(htmlspecialchars($row['message'], ENT_QUOTES, 'UTF-8')) . "</p>";
+
+    // メッセージの処理
+    $message = $row['message'];
+
+    // 1. 引用レスをリンク化
+    $message = linkifyReplies($message, $base_url, $board_id, $thread_id);
+
+    // 2. 未リンクのURLをリンク化
+    $message = linkifyUrls($message);
+
+    // 改行を<br>に変換
+    $message = nl2br($message);
+
+    echo "<p>" . $message . "</p>";
     echo "</div>";
 }
+
+// 未リンクのURLをリンク化する関数
+function linkifyUrls($text) {
+    // 既に<a>タグで囲まれていないURLをマッチする正規表現
+    $url_pattern = '/(?<!<a[^>]*?>)(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)(?![^<>]*?<\/a>)/i';
+
+    $text = preg_replace_callback($url_pattern, function($matches) {
+        $url = $matches[0];
+
+        // URLがhttpまたはhttpsで始まっていない場合は補完
+        if (!preg_match('/^https?:\/\//i', $url)) {
+            $href = 'http://' . $url;
+        } else {
+            $href = $url;
+        }
+
+        return '<a href="' . $href . '">' . $url . '</a>';
+    }, $text);
+
+    return $text;
+}
+
+// 引用レスをリンク化する関数
+function linkifyReplies($text, $base_url, $board_id, $thread_id) {
+    // 引用レスの正規表現パターン
+    $reply_pattern = '/&gt;&gt;(\d+(-\d+)?)/';
+
+    $text = preg_replace_callback($reply_pattern, function($matches) use ($base_url, $board_id, $thread_id) {
+        $reply_number = $matches[1];
+        $link = $base_url . '/' . $board_id . '/' . $thread_id . '/' . $reply_number;
+        return '<a href="' . $link . '">&gt;&gt;' . $reply_number . '</a>';
+    }, $text);
+
+    return $text;
+}
+
 ?>

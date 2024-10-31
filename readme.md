@@ -5,8 +5,10 @@
 php.iniでmbstring,sqlite3が有効になっていることを確認する。  
 converter/datsフォルダに/[dirname]/xxx.datの形でデータを置く。dirnameは英数のみ。
 
-### コマンドライン
-dat2db.phpで、dat→dbを生成  
+### ローカル
+dat2db.phpで、dat→dbを生成。適宜サーバーにアップロード。  
+
+### 掲示板名設定
 bbsname.phpで、掲示版ディレクトリ名毎に掲示板名を設定  
 
 ### ブラウザ
