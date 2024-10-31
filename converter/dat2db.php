@@ -83,15 +83,17 @@ foreach ($board_dirs as $board_dir) {
                 // データを分割し、期待する要素数が揃っているか確認
                 $parts = explode('<>', $line);
 
-                if (count($parts) >= 4) {
+                if ($post_order == 1) {
                     $name = $parts[0];
                     $mail = $parts[1];
                     $datetime_id = $parts[2];
                     $message = $parts[3];
-                    $title = $parts[4] ?? $title; // タイトルがない場合は前の値を使用
+                    $title = $parts[4];
                 } else {
-                    // 必要な要素数が揃っていない場合の処理
-                    continue; // この行をスキップ
+                    $name = $parts[0];
+                    $mail = $parts[1];
+                    $datetime_id = $parts[2];
+                    $message = $parts[3];
                 }
 
                 // datetime_idを`date`, `time`, `id`に分割

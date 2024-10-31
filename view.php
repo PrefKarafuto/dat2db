@@ -236,10 +236,11 @@ function displayThreadList($db, $board_id, $base_url) {
     echo "<head><meta charset='UTF-8'><title>スレッド一覧</title></head>";
     echo "<body>";
     echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧</h1>";
+    echo "<a href='./'>← 掲示板一覧に戻る</a>";
     echo "<ul>";
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $thread_id = htmlspecialchars($row['thread_id'], ENT_QUOTES, 'UTF-8');
-        $title = htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8');
+        $title = $row['title'];
         echo "<li><a href='{$base_url}/{$board_id}/{$thread_id}/'>{$title}</a></li>";
     }
     echo "</ul>";
@@ -417,24 +418,41 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
 
 // スレッド内の全レス表示（ページネーションなし）
 function displayAllResponses($db, $board_id, $thread_id, $base_url) {
+    // スレッドタイトルを取得
+    $stmt_title = $db->prepare("SELECT title FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
+    $stmt_title->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $stmt_title->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
+    $result_title = $stmt_title->execute();
+    if (!$result_title) {
+        exitWithError("スレッドタイトルを取得中にデータベースエラーが発生しました。");
+    }
+    $title_row = $result_title->fetchArray(SQLITE3_ASSOC);
+    if ($title_row) {
+        $title = $title_row['title'];
+    } else {
+        exitWithError("指定されたスレッドが見つかりません。");
+    }
+
+    // 投稿内容を取得
     $stmt = $db->prepare("SELECT post_order, name, mail, date, time, id, message FROM Posts WHERE board_id = :board_id AND thread_id = :thread_id ORDER BY post_order ASC");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
     $result = $stmt->execute();
     if (!$result) {
-        exitWithError("データベースエラーが発生しました。");
+        exitWithError("投稿を取得中にデータベースエラーが発生しました。");
     }
 
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>スレッド表示</title></head>";
+    echo "<head><meta charset='UTF-8'><title>$title</title></head>";
     echo "<body>";
-    echo "<h1>スレッド: " . htmlspecialchars($thread_id, ENT_QUOTES, 'UTF-8') . "</h1>";
+    echo "<h1>$title</h1>";
+    echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $hasResult = true;
-        displayResponse($row);
+        displayResponse($row, $base_url, $board_id, $thread_id);
     }
 
     if (!$hasResult) {
@@ -453,6 +471,20 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     if (empty($post_orders)) {
         exitWithError("無効なレス指定形式です。");
     }
+    // スレッドタイトルを取得
+    $stmt_title = $db->prepare("SELECT title FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
+    $stmt_title->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $stmt_title->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
+    $result_title = $stmt_title->execute();
+    if (!$result_title) {
+        exitWithError("スレッドタイトルを取得中にデータベースエラーが発生しました。");
+    }
+    $title_row = $result_title->fetchArray(SQLITE3_ASSOC);
+    if ($title_row) {
+        $title = $title_row['title'];
+    } else {
+        exitWithError("指定されたスレッドが見つかりません。");
+    }
 
     // 必要なレスのみを取得
     $placeholders = implode(',', array_fill(0, count($post_orders), '?'));
@@ -470,9 +502,10 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
 
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>レス表示</title></head>";
+    echo "<head><meta charset='UTF-8'><title>$title</title></head>";
     echo "<body>";
-    echo "<h1>スレッド: " . htmlspecialchars($thread_id, ENT_QUOTES, 'UTF-8') . " の指定レス表示</h1>";
+    echo "<h1>$title</h1>";
+    echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -556,8 +589,8 @@ function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') 
     if (!empty($row['mail'])) {
         echo " (<a href='mailto:" . $row['mail'] . "'>" . $row['mail'] . "</a>)";
     }
-    echo "</strong></p>";
-    echo "<p>" . $row['date'] . " " . $row['time'];
+    echo "</strong>";
+    echo " " . $row['date'] . " " . $row['time'];
     if (!empty($row['id'])) {
         echo " ID:" . $row['id'];
     }
@@ -573,31 +606,62 @@ function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') 
     $message = linkifyUrls($message);
 
     // 改行を<br>に変換
-    $message = nl2br($message);
+    //$message = nl2br($message);
 
     echo "<p>" . $message . "</p>";
     echo "</div>";
 }
 
 // 未リンクのURLをリンク化する関数
-function linkifyUrls($text) {
-    // 既に<a>タグで囲まれていないURLをマッチする正規表現
-    $url_pattern = '/(?<!<a[^>]*?>)(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)(?![^<>]*?<\/a>)/i';
+function linkifyUrls($html) {
+    $dom = new DOMDocument();
 
-    $text = preg_replace_callback($url_pattern, function($matches) {
-        $url = $matches[0];
+    // エンコーディングの問題を避けるためにエラーハンドリングを抑制
+    libxml_use_internal_errors(true);
 
-        // URLがhttpまたはhttpsで始まっていない場合は補完
-        if (!preg_match('/^https?:\/\//i', $url)) {
-            $href = 'http://' . $url;
-        } else {
-            $href = $url;
+    // HTMLをロード
+    $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+    // XPathを使用してテキストノードを取得
+    $xpath = new DOMXPath($dom);
+    $textNodes = $xpath->query('//text()');
+
+    foreach ($textNodes as $textNode) {
+        $text = $textNode->nodeValue;
+
+        // URLをリンク化
+        $newText = preg_replace_callback('/(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/i', function($matches) {
+            $url = $matches[0];
+
+            // URLがhttpまたはhttpsで始まっていない場合は補完
+            if (!preg_match('/^https?:\/\//i', $url)) {
+                $href = 'http://' . $url;
+            } else {
+                $href = $url;
+            }
+
+            return '<a href="' . $href . '">' . $url . '</a>';
+        }, $text);
+
+        // テキストが変更された場合のみ置換
+        if ($newText !== $text) {
+            $fragment = $dom->createDocumentFragment();
+            $fragment->appendXML($newText);
+            $textNode->parentNode->replaceChild($fragment, $textNode);
         }
+    }
 
-        return '<a href="' . $href . '">' . $url . '</a>';
-    }, $text);
+    // HTMLを取得
+    $html = $dom->saveHTML();
 
-    return $text;
+    // 不要なXML宣言を削除
+    $html = preg_replace('/^<\?xml.*?\?>\s*/', '', $html);
+
+    // エラーハンドリングを元に戻す
+    libxml_clear_errors();
+    libxml_use_internal_errors(false);
+
+    return $html;
 }
 
 // 引用レスをリンク化する関数
