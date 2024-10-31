@@ -1,0 +1,7 @@
+{
+    "db_file": "bbs_log.db",
+    "board_name": {
+      "bbs1": "掲示板１",
+      "bbs2": "掲示板２"
+    }
+}
