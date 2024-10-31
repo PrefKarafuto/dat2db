@@ -27,7 +27,7 @@ $script_name = trim($_SERVER['SCRIPT_NAME'], '/');
 $script_segments = explode('/', $script_name);
 
 // パス情報の取得
-$path_segments = array_slice($segments, count($script_segments) - 1);
+$path_segments = array_slice($segments, count($script_segments));
 
 // URL形式のチェック
 if (count($path_segments) !== 3 || $path_segments[1] !== 'dat') {
@@ -74,8 +74,8 @@ if (!$result) {
 }
 
 // ダウンロードファイル名の設定
-$filename = "{$thread_id}.dat";
-header("Content-Disposition: attachment; filename=\"{$filename}\"");
+//$filename = "{$thread_id}.dat";
+//header("Content-Disposition: attachment; filename=\"{$filename}\"");
 
 // スレッドの内容をdat形式で出力
 $is_first_line = true;

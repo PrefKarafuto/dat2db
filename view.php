@@ -19,14 +19,14 @@ if (!$db) {
 }
 
 // ベースURLの取得
-$base_url = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+$base_url = rtrim($_SERVER['SCRIPT_NAME'], '/');
 
 // URLパスの解析
 $path = parseUrlPath($_SERVER['REQUEST_URI'], $base_url);
 
 // ルーティングの処理
 if (empty($path)) {
-    if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && (isset($_GET['query']) || isset($_GET['date']) || isset($_GET['id']))) {
         // 全体検索
         $sanitized_params = sanitizeInput($_GET);
         searchAllPosts($db, $sanitized_params, $base_url);
@@ -40,7 +40,7 @@ if (empty($path)) {
         exitWithError("無効なboard_idです。");
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && (isset($_GET['query']) || isset($_GET['date']) || isset($_GET['id']))) {
         // 掲示板内検索
         $sanitized_params = sanitizeInput($_GET);
         searchBoardPosts($db, $board_id, $sanitized_params, $base_url);
@@ -94,12 +94,15 @@ function exitWithError($message) {
 function parseUrlPath($request_uri, $base_url) {
     $parsed_url = parse_url($request_uri);
     $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
-    $path = substr($path, strlen($base_url));
+    // $base_urlの長さを取得
+    $base_url_length = strlen($base_url);
+    // $pathから$base_url部分を削除
+    $path = substr($path, $base_url_length);
     $path = trim($path, '/');
-    if ($path === 'view.php') {
-        $path = '';
-    }
-    return explode('/', $path);
+    $path_parts = explode('/', $path);
+    // 空の要素を取り除く
+    $path_parts = array_filter($path_parts, function($value) { return $value !== ''; });
+    return array_values($path_parts);
 }
 
 // 入力をサニタイズする関数
@@ -147,22 +150,31 @@ function getPaginationParams($params) {
 // ページネーションのリンク生成
 function generatePaginationLinks($current_page, $total_pages, $base_url, $query_params = []) {
     $links = '';
-    $query_string = http_build_query($query_params);
+
+    // 'page'キーを削除して重複を防ぐ
+    unset($query_params['page']);
 
     if ($current_page > 1) {
         $prev_page = $current_page - 1;
-        $links .= "<a href='{$base_url}?{$query_string}&page={$prev_page}'>前のページ</a> ";
+        $params = $query_params;
+        $params['page'] = $prev_page;
+        $query_string = http_build_query($params);
+        $links .= "<a href='{$base_url}?{$query_string}'>前のページ</a> ";
     }
 
     $links .= "ページ {$current_page} / {$total_pages}";
 
     if ($current_page < $total_pages) {
         $next_page = $current_page + 1;
-        $links .= " <a href='{$base_url}?{$query_string}&page={$next_page}'>次のページ</a>";
+        $params = $query_params;
+        $params['page'] = $next_page;
+        $query_string = http_build_query($params);
+        $links .= " <a href='{$base_url}?{$query_string}'>次のページ</a>";
     }
 
     return $links;
 }
+
 
 // 掲示板一覧の表示
 function displayBoardList($db, $base_url) {
