@@ -222,7 +222,7 @@ function displayThreadList($db, $board_id, $base_url) {
 
     $total_pages = ceil($total_threads / $limit);
 
-    $stmt = $db->prepare("SELECT thread_id, title FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC LIMIT :limit OFFSET :offset");
+    $stmt = $db->prepare("SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC LIMIT :limit OFFSET :offset");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
     $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
@@ -235,13 +235,17 @@ function displayThreadList($db, $board_id, $base_url) {
     echo "<html lang='ja'>";
     echo "<head><meta charset='UTF-8'><title>スレッド一覧</title></head>";
     echo "<body>";
-    echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧</h1>";
+    echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧 ($total_threads)</h1>";
     echo "<a href='./'>← 掲示板一覧に戻る</a>";
     echo "<ul>";
+
+    $thread_order = ($page - 1) * $limit;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $thread_id = htmlspecialchars($row['thread_id'], ENT_QUOTES, 'UTF-8');
         $title = $row['title'];
-        echo "<li><a href='{$base_url}/{$board_id}/{$thread_id}/'>{$title}</a></li>";
+        $res_count = $row['response_count'];
+        $thread_order ++;
+        echo "<li>{$thread_order}: <a href='{$base_url}/{$board_id}/{$thread_id}/'>{$title} ({$res_count})</a></li>";
     }
     echo "</ul>";
 
@@ -419,16 +423,17 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
 // スレッド内の全レス表示（ページネーションなし）
 function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     // スレッドタイトルを取得
-    $stmt_title = $db->prepare("SELECT title FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
+    $stmt_title = $db->prepare("SELECT title, response_count FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
     $stmt_title->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt_title->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
     $result_title = $stmt_title->execute();
     if (!$result_title) {
         exitWithError("スレッドタイトルを取得中にデータベースエラーが発生しました。");
     }
-    $title_row = $result_title->fetchArray(SQLITE3_ASSOC);
-    if ($title_row) {
-        $title = $title_row['title'];
+    $row = $result_title->fetchArray(SQLITE3_ASSOC);
+    if ($row) {
+        $res_count = $row['response_count'];
+        $title = $row['title'];
     } else {
         exitWithError("指定されたスレッドが見つかりません。");
     }
@@ -446,7 +451,7 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     echo "<html lang='ja'>";
     echo "<head><meta charset='UTF-8'><title>$title</title></head>";
     echo "<body>";
-    echo "<h1>$title</h1>";
+    echo "<h1>$title ($res_count)</h1>";
     echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
@@ -472,16 +477,17 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
         exitWithError("無効なレス指定形式です。");
     }
     // スレッドタイトルを取得
-    $stmt_title = $db->prepare("SELECT title FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
+    $stmt_title = $db->prepare("SELECT title, response_count FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
     $stmt_title->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $stmt_title->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
     $result_title = $stmt_title->execute();
     if (!$result_title) {
         exitWithError("スレッドタイトルを取得中にデータベースエラーが発生しました。");
     }
-    $title_row = $result_title->fetchArray(SQLITE3_ASSOC);
-    if ($title_row) {
-        $title = $title_row['title'];
+    $row = $result_title->fetchArray(SQLITE3_ASSOC);
+    if ($row) {
+        $res_count = $row['response_count'];
+        $title = $row['title'];
     } else {
         exitWithError("指定されたスレッドが見つかりません。");
     }
@@ -504,7 +510,7 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     echo "<html lang='ja'>";
     echo "<head><meta charset='UTF-8'><title>$title</title></head>";
     echo "<body>";
-    echo "<h1>$title</h1>";
+    echo "<h1>$title ($res_count)</h1>";
     echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
