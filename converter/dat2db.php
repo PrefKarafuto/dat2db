@@ -83,7 +83,7 @@ foreach ($board_dirs as $board_dir) {
                 // データを分割し、期待する要素数が揃っているか確認
                 $parts = explode('<>', $line);
 
-                if ($post_order == 1) {
+                if ($post_order === 1) {
                     $name = $parts[0];
                     $mail = $parts[1];
                     $datetime_id = $parts[2];

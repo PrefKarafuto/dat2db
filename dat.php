@@ -77,7 +77,32 @@ if ($request_file === 'subject.txt') {
 
         echo $converted_line . "\n";
     }
-} elseif ($request_file === 'dat' && isset($path_segments[2])) {
+} elseif ($request_file === 'SETTING.TXT') {
+    // SETTING.TXTがリクエストされた場合
+    $stmt = $db->prepare("SELECT board_name FROM Boards WHERE board_id = :board_id");
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $result = $stmt->execute();
+    if (!$result) {
+        exitWithError("データベースエラーが発生しました。");
+    }
+    $row = $result->fetchArray(SQLITE3_ASSOC);
+    if (!$row) {
+        exitWithError("指定された掲示板が見つかりません: {$board_id}");
+    }
+    $board_name = $row['board_name'];
+
+    // フォーマットに従って出力
+    $line = "BBS_TITLE={$board_name}";
+
+    // エンコーディングの変換
+    $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8');
+    if ($converted_line === false) {
+        $converted_line = mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+    }
+
+    echo $converted_line . "\n"; 
+    
+}elseif ($request_file === 'dat' && isset($path_segments[2])) {
     // スレッドのdatファイルがリクエストされた場合
     $thread_file = $path_segments[2];
     $thread_id = basename($thread_file, '.dat');

@@ -1,4 +1,7 @@
 <?php
+// マルチバイト文字列の内部エンコーディングを設定
+mb_internal_encoding('UTF-8');
+
 // データベースファイルの確認
 $db_file = '../bbs_log.db';
 if (!file_exists($db_file)) {
@@ -39,8 +42,11 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 foreach ($board_ids as $board_id) {
     while (true) {
         echo "board_id '{$board_id}' の board_name を入力してください：";
-        $board_name = trim(fgets(STDIN));
-        
+        $board_name_input = trim(fgets(STDIN));
+
+        // 入力文字列をUTF-8に変換（Shift-JISから）
+        $board_name = mb_convert_encoding($board_name_input, 'UTF-8', 'CP932');
+
         // board_nameが空でないかチェック
         if (empty($board_name)) {
             echo "board_name が空です。再度入力してください。\n";
