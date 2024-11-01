@@ -1,6 +1,6 @@
 <?php
 // データベースファイル名
-$db_file = './converter/bbs_log.db';
+$db_file = 'bbs_log.db';
 
 // データベースファイルの確認
 if (!file_exists($db_file)) {

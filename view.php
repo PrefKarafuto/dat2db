@@ -9,7 +9,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '0'); // 本番環境では'0'に設定
 
 // データベースファイルの確認と接続
-$db_file = './converter/bbs_log.db';
+$db_file = 'bbs_log.db';
 if (!file_exists($db_file)) {
     exitWithError("エラー: データベースファイルが存在しません。");
 }
