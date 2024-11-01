@@ -11,5 +11,4 @@ converter/datsフォルダに/[dirname]/xxx.datの形でデータを置く。dir
 
 ### ブラウザ
 converterフォルダ以外をサーバーにアップロード。  
-dat.phpはdbからdat形式でデータ取得（専ブラ用）  
-view.phpはスレッドの閲覧・検索  
+view.phpにアクセスして、スレッドの閲覧・検索を行う。専用ブラウザ対応。  
