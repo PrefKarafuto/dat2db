@@ -1063,7 +1063,7 @@ function getLastPostOrders($db, $board_id, $thread_id, $count) {
 // レスを表示する関数
 function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') {
     echo "<div class='response'>";
-    echo "<p><strong>" . htmlspecialchars($row['post_order'], ENT_QUOTES, 'UTF-8') . " - " . htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8');
+    echo "<p><strong>" . htmlspecialchars($row['post_order'], ENT_QUOTES, 'UTF-8') . " - " . $row['name'] . "</b>";
     if (!empty($row['mail'])) {
         echo " (<a href='mailto:" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "'>" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "</a>)";
     }
