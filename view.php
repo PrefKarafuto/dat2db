@@ -236,7 +236,7 @@ function displayThreadList($db, $board_id, $base_url) {
     echo "<head><meta charset='UTF-8'><title>スレッド一覧</title></head>";
     echo "<body>";
     echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧 ($total_threads)</h1>";
-    echo "<a href='../'>← 掲示板一覧に戻る</a>";
+    echo "<a href='./'>← 掲示板一覧に戻る</a>";
     echo "<ul>";
 
     $thread_order = ($page - 1) * $limit;
