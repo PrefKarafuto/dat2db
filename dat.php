@@ -2,9 +2,6 @@
 // データベースファイル名
 $db_file = './converter/bbs_log.db';
 
-// ヘッダーの設定（出力前に行う）
-header('Content-Type: text/plain; charset=Shift-JIS');
-
 // データベースファイルの確認
 if (!file_exists($db_file)) {
     exitWithError("エラー: データベースファイル '{$db_file}' が存在しません。");
@@ -16,7 +13,7 @@ if (!$db) {
     exitWithError("データベースに接続できません。");
 }
 
-// URLからboard_idとリクエストファイルを取得
+// URLからパスを取得
 $parsed_url = parse_url($_SERVER['REQUEST_URI']);
 $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
 $path = trim($path, '/');
@@ -29,13 +26,34 @@ $script_segments = explode('/', $script_name);
 // パス情報の取得
 $path_segments = array_slice($segments, count($script_segments));
 
+// デバッグ: リクエストURIとパスセグメントをログに出力
+error_log("Request URI: " . $_SERVER['REQUEST_URI']);
+error_log("Path Segments: " . print_r($segments, true));
+error_log("Script Segments: " . print_r($script_segments, true));
+error_log("Path Segments after script name: " . print_r($path_segments, true));
+
 // URL形式のチェック
-if (count($path_segments) < 2) {
+if (count($path_segments) < 1) {
     exitWithError("不正なURL形式です。");
+}
+
+// 特殊パスのチェック: /test/bbs.cgi
+if ($path_segments[0] === 'test' && isset($path_segments[1]) && strtolower($path_segments[1]) === 'bbs.cgi') {
+    handle_bbs_cgi();
+    exit;
+}
+
+// 通常のboard_idとrequest_fileの処理
+if (count($path_segments) < 2) {
+    exitWithError("専用ブラウザからアクセスしてください。");
 }
 
 $board_id = $path_segments[0];
 $request_file = $path_segments[1];
+
+// デバッグ: board_idとrequest_fileをログに出力
+error_log("Board ID: " . $board_id);
+error_log("Request File: " . $request_file);
 
 // board_idのバリデーション
 if (!isValidBoardId($board_id)) {
@@ -47,11 +65,48 @@ $board_check_stmt = $db->prepare("SELECT 1 FROM Boards WHERE board_id = :board_i
 $board_check_stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
 $board_check_result = $board_check_stmt->execute();
 if (!$board_check_result || !$board_check_result->fetchArray(SQLITE3_ASSOC)) {
+    error_log("Board ID not found: " . $board_id);
     exitWithError("指定された掲示板が見つかりません: {$board_id}");
 }
+error_log("Board ID exists: " . $board_id);
 
-// subject.txtがリクエストされた場合
-if ($request_file === 'subject.txt') {
+// リクエストファイルに応じた処理
+switch (strtolower($request_file)) {
+    case 'subject.txt':
+        handle_subject_txt($db, $board_id);
+        break;
+    case 'setting.txt':
+        handle_setting_txt($db, $board_id);
+        break;
+    case 'dat':
+        if (isset($path_segments[2])) {
+            handle_dat_file($db, $board_id, $path_segments[2]);
+        } else {
+            exitWithError("不正なリクエストです。");
+        }
+        break;
+    default:
+        exitWithError("不正なリクエストです。");
+        break;
+}
+
+$db->close();
+
+// エラー出力と終了
+function exitWithError($message) {
+    // エラー内容に応じてContent-Typeを設定
+    if (strpos($message, 'HTML') !== false || strpos($message, '<!DOCTYPE') !== false) {
+        header('Content-Type: text/html; charset=Shift-JIS');
+    } else {
+        header('Content-Type: text/plain; charset=Shift-JIS');
+    }
+    echo mb_convert_encoding($message . "\n", 'SJIS', 'UTF-8');
+    exit;
+}
+
+// subject.txtの処理
+function handle_subject_txt($db, $board_id) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
     // スレッド一覧を取得
     $stmt = $db->prepare("SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
@@ -77,7 +132,11 @@ if ($request_file === 'subject.txt') {
 
         echo $converted_line . "\n";
     }
-} elseif ($request_file === 'SETTING.TXT') {
+}
+
+// SETTING.TXTの処理
+function handle_setting_txt($db, $board_id) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
     // SETTING.TXTがリクエストされた場合
     $stmt = $db->prepare("SELECT board_name FROM Boards WHERE board_id = :board_id");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
@@ -92,7 +151,7 @@ if ($request_file === 'subject.txt') {
     $board_name = $row['board_name'];
 
     // フォーマットに従って出力
-    $line = "BBS_TITLE={$board_name}";
+    $line = "BBS_TITLE={$board_name}\nBBS_NONAME_NAME=読み取り専用";
 
     // エンコーディングの変換
     $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8');
@@ -100,11 +159,44 @@ if ($request_file === 'subject.txt') {
         $converted_line = mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
     }
 
-    echo $converted_line . "\n"; 
-    
-}elseif ($request_file === 'dat' && isset($path_segments[2])) {
-    // スレッドのdatファイルがリクエストされた場合
-    $thread_file = $path_segments[2];
+    echo $converted_line . "\n";
+}
+
+// bbs.cgiの処理
+function handle_bbs_cgi() {
+    header('Content-Type: text/html; charset=Shift-JIS');
+    // test/bbs.cgiがリクエストされた場合の処理
+    $line = "<!DOCTYPE html>\n";
+    $line .= "<html lang='ja'>\n";
+    $line .= "<head>\n";
+    $line .= "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">\n";
+    $line .= "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n";
+    $line .= "<title>ＥＲＲＯＲ！</title>\n";
+    $line .= "</head>\n";
+    $line .= "<!--nobanner-->\n";
+    $line .= "<body>\n";
+    $line .= "<!-- 2ch_X:error -->\n";
+    $line .= "<div style=\"margin-bottom:2em;\">\n";
+    $line .= "<font size=\"+1\" color=\"#FF0000\"><b>ＥＲＲＯＲ：読み取り専用</b></font>\n";
+    $line .= "</div>\n";
+    $line .= "<blockquote>\n";
+    $line .= "<div>読み取り専用につき投稿できません。</div>\n";
+    $line .= "</blockquote>\n";
+    $line .= "</body>\n";
+    $line .= "</html>\n";
+
+    // エンコーディングの変換
+    $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8');
+    if ($converted_line === false) {
+        $converted_line = mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+    }
+
+    echo $converted_line;
+}
+
+// datファイルの処理
+function handle_dat_file($db, $board_id, $thread_file) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
     $thread_id = basename($thread_file, '.dat');
 
     // thread_idのバリデーション
@@ -168,16 +260,6 @@ if ($request_file === 'subject.txt') {
 
         echo $converted_line . "\n";
     }
-} else {
-    exitWithError("不正なリクエストです。");
-}
-
-$db->close();
-
-// エラー出力と終了
-function exitWithError($message) {
-    echo mb_convert_encoding($message . "\n", 'SJIS', 'UTF-8');
-    exit;
 }
 
 // board_idのバリデーション
