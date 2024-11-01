@@ -35,29 +35,35 @@ if (empty($path)) {
             // 全体検索
             searchAllPosts($db, $sanitized_params, $base_url);
         }
-    } else {
+    }else {
         // 掲示板一覧の表示
         displayBoardList($db, $base_url);
     }
 } elseif (count($path) === 1) {
     $board_id = $path[0];
-    if (!isValidBoardId($board_id)) {
-        exitWithError("無効なboard_idです。");
-    }
-
-    if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
-        $sanitized_params = sanitizeInput($_GET);
-        if (!empty($sanitized_params['title'])) {
-            // 掲示板内のスレッドタイトル検索
-            searchBoardThreads($db, $board_id, $sanitized_params, $base_url);
-        } else {
-            // 掲示板内検索
-            searchBoardPosts($db, $board_id, $sanitized_params, $base_url);
+    if($board_id === 'bbsmenu.html') {
+        // bbsmenuを表示
+        displayBBSmenuHtml($db, $base_url);
+    }else{
+        if (!isValidBoardId($board_id)) {
+            exitWithError("無効なboard_idです。");
         }
-    } else {
-        // スレッド一覧の表示
-        displayThreadList($db, $board_id, $base_url);
+
+        if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
+            $sanitized_params = sanitizeInput($_GET);
+            if (!empty($sanitized_params['title'])) {
+                // 掲示板内のスレッドタイトル検索
+                searchBoardThreads($db, $board_id, $sanitized_params, $base_url);
+            } else {
+                // 掲示板内検索
+                searchBoardPosts($db, $board_id, $sanitized_params, $base_url);
+            }
+        } else {
+            // スレッド一覧の表示
+            displayThreadList($db, $board_id, $base_url);
+        }
     }
+    
 } elseif (count($path) === 2) {
     $board_id = $path[0];
     $thread_id = $path[1];
@@ -208,6 +214,70 @@ function generatePaginationLinks($current_page, $total_pages, $base_url, $query_
     return $links;
 }
 
+// BBSMENUの表示
+function displayBBSmenuHtml($db, $base_url) {
+    // データベースから掲示板の情報を取得
+    $result = $db->query("SELECT board_id, board_name, category_name FROM Boards ORDER BY category_name ASC, board_id ASC");
+    if (!$result) {
+        exitWithError("データベースエラーが発生しました。");
+    }
+
+    // カテゴリーごとに掲示板を格納する配列
+    $categories = [];
+
+    // データをカテゴリーごとにグループ化
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $category_name = $row['category_name'];
+        if (!isset($categories[$category_name])) {
+            $categories[$category_name] = [];
+        }
+        $categories[$category_name][] = $row;
+    }
+
+    // 出力のエンコーディングをShift-JISに設定
+    header('Content-Type: text/html; charset=Shift_JIS');
+
+    // 出力を格納する変数
+    $html_output = "";
+
+    $html_output .= "<!DOCTYPE html>";
+    $html_output .= "<html lang='ja'>";
+    $html_output .= "<HEAD><META http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">";
+    $html_output .= "<TITLE>BBS MENU</TITLE>";
+    $html_output .= "<BASE TARGET=\"_blank\"></HEAD>";
+    $html_output .= "<BODY TEXT=\"#CC3300\" BGCOLOR=\"#FFFFFF\" link=\"#0000FF\" alink=\"#ff0000\" vlink=\"#660099\">";
+    $html_output .= "<B>BBS MENU</B><BR>";
+    $html_output .= "<BR>専用ブラウザ用<FONT size=2>";
+
+    foreach ($categories as $category_name => $boards) {
+        // カテゴリー名を表示
+        $category_name_escaped = htmlspecialchars($category_name, ENT_QUOTES, 'UTF-8');
+        $html_output .= "<BR><BR><B>{$category_name_escaped}</B><BR>";
+
+        // 掲示板を表示
+        foreach ($boards as $board) {
+            $board_id = htmlspecialchars($board['board_id'], ENT_QUOTES, 'UTF-8');
+            // タイトルはエスケープしない（元々エスケープされていない場合）
+            $board_name = $board['board_name'];
+            $board_url = htmlspecialchars($base_url . '/../dat.php/' . $board_id . '/', ENT_QUOTES, 'UTF-8');
+
+            $html_output .= "<A HREF=\"{$board_url}\">{$board_name}</A><BR>";
+        }
+    }
+
+    $html_output .= "<BR><BR><BR>";
+    $html_output .= "</FONT>";
+    $html_output .= "</BODY>";
+    $html_output .= "</HTML>";
+
+    // UTF-8からShift-JISに変換
+    $html_output_sjis = mb_convert_encoding($html_output, 'Shift_JIS', 'UTF-8');
+
+    // 出力
+    echo $html_output_sjis;
+}
+
+
 
 // 掲示板一覧の表示
 function displayBoardList($db, $base_url) {
@@ -237,6 +307,7 @@ function displayBoardList($db, $base_url) {
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>掲示板一覧</h1>";
+    echo "<p><a href=\"./bbsmenu.html\">専ブラ用BBSMENU</a></p>";
     echo "<ul>";
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $board_id = htmlspecialchars($row['board_id'], ENT_QUOTES, 'UTF-8');
