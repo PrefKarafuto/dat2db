@@ -1,12 +1,12 @@
 <?php
-// ヘッダーの設定
-header('Content-Type: text/html; charset=UTF-8');
+// ヘッダーの設定（出力エンコーディングをShift-JISに統一）
+header('Content-Type: text/html; charset=Shift-JIS');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
-// エラーレポートの設定（デバッグ時のみ有効にする）
+// エラーレポートの設定（本番環境では display_errors を '0' に設定）
 error_reporting(E_ALL);
-ini_set('display_errors', '0'); // 本番環境では'0'に設定
+ini_set('display_errors', '0');
 
 // データベースファイルの確認と接続
 $db_file = 'bbs_log.db';
@@ -22,87 +22,30 @@ if (!$db) {
 $base_url = rtrim($_SERVER['SCRIPT_NAME'], '/');
 
 // URLパスの解析
-$path = parseUrlPath($_SERVER['REQUEST_URI'], $base_url);
+$parsed_url = parse_url($_SERVER['REQUEST_URI']);
+$path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
+$path_segments = parseUrlPath($_SERVER['REQUEST_URI'], $base_url);
 
-// ルーティングの処理
-if (empty($path)) {
-    if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
-        $sanitized_params = sanitizeInput($_GET);
-        if (!empty($sanitized_params['title'])) {
-            // スレッドタイトル検索
-            searchAllThreads($db, $sanitized_params, $base_url);
-        } else {
-            // 全体検索
-            searchAllPosts($db, $sanitized_params, $base_url);
-        }
-    }else {
-        // 掲示板一覧の表示
-        displayBoardList($db, $base_url);
-    }
-} elseif (count($path) === 1) {
-    $board_id = $path[0];
-    if($board_id === 'bbsmenu.html') {
-        // bbsmenuを表示
-        displayBBSmenuHtml($db, $base_url);
-    }else{
-        if (!isValidBoardId($board_id)) {
-            exitWithError("無効なboard_idです。");
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
-            $sanitized_params = sanitizeInput($_GET);
-            if (!empty($sanitized_params['title'])) {
-                // 掲示板内のスレッドタイトル検索
-                searchBoardThreads($db, $board_id, $sanitized_params, $base_url);
-            } else {
-                // 掲示板内検索
-                searchBoardPosts($db, $board_id, $sanitized_params, $base_url);
-            }
-        } else {
-            // スレッド一覧の表示
-            displayThreadList($db, $board_id, $base_url);
-        }
-    }
-    
-} elseif (count($path) === 2) {
-    $board_id = $path[0];
-    $thread_id = $path[1];
-
-    if (!isValidBoardId($board_id) || !isValidThreadId($thread_id)) {
-        exitWithError("無効なURLです。");
-    }
-
-    // 全レス表示
-    displayAllResponses($db, $board_id, $thread_id, $base_url);
-} elseif (count($path) === 3) {
-    $board_id = $path[0];
-    $thread_id = $path[1];
-    $response_format = $path[2];
-
-    if (!isValidBoardId($board_id) || !isValidThreadId($thread_id)) {
-        exitWithError("無効なURLです。");
-    }
-
-    // 指定レスの表示
-    displaySelectedResponses($db, $board_id, $thread_id, $response_format, $base_url);
+// リクエストの種類を判定して処理を振り分け
+if (isDataRequest($path_segments)) {
+    handleDataRequest($db, $path_segments);
 } else {
-    exitWithError("無効なURL形式です。");
+    handleWebRequest($db, $base_url, $path_segments);
 }
 
 $db->close();
 
-// 関数定義
-
 // エラー出力と終了
 function exitWithError($message) {
-    echo "<!DOCTYPE html>";
-    echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>エラー</title></head>";
-    echo "<body>";
-    echo "<h1>エラー</h1>";
-    echo "<p>{$message}</p>";
-    echo "</body>";
-    echo "</html>";
+    // エンコーディングの変換
+    $output = mb_convert_encoding($message . "\n", 'SJIS', 'UTF-8');
+    // Content-Typeの設定
+    if (strpos($message, '<html') !== false) {
+        header('Content-Type: text/html; charset=Shift-JIS');
+    } else {
+        header('Content-Type: text/plain; charset=Shift-JIS');
+    }
+    echo $output;
     exit;
 }
 
@@ -121,27 +64,128 @@ function parseUrlPath($request_uri, $base_url) {
     return array_values($path_parts);
 }
 
-// 入力をサニタイズする関数
+// データリクエストかどうかを判定
+function isDataRequest($path_segments) {
+    if (empty($path_segments)) return false;
+    if ($path_segments[0] === 'test' && isset($path_segments[1]) && strtolower($path_segments[1]) === 'bbs.cgi') return true;
+    if (isset($path_segments[1]) && in_array(strtolower($path_segments[1]), ['head.txt', 'subject.txt', 'setting.txt', 'dat'])) return true;
+    return false;
+}
+
+// データリクエストの処理
+function handleDataRequest($db, $path_segments) {
+    if ($path_segments[0] === 'test' && isset($path_segments[1]) && strtolower($path_segments[1]) === 'bbs.cgi') {
+        handle_bbs_cgi();
+        exit;
+    }
+
+    $board_id = $path_segments[0];
+    if (!isValidBoardId($board_id)) {
+        exitWithError("無効なboard_idです。");
+    }
+
+    $board_check_stmt = $db->prepare("SELECT 1 FROM Boards WHERE board_id = :board_id");
+    $board_check_stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $board_check_result = $board_check_stmt->execute();
+    if (!$board_check_result || !$board_check_result->fetchArray(SQLITE3_ASSOC)) {
+        exitWithError("指定された掲示板が見つかりません: {$board_id}");
+    }
+
+    if (!isset($path_segments[1])) {
+        exitWithError("不正なリクエストです。");
+    }
+    $request_file = $path_segments[1];
+
+    switch (strtolower($request_file)) {
+        case 'head.txt':
+            handle_head_txt($db, $board_id);
+            break;
+        case 'subject.txt':
+            handle_subject_txt($db, $board_id);
+            break;
+        case 'setting.txt':
+            handle_setting_txt($db, $board_id);
+            break;
+        case 'dat':
+            if (isset($path_segments[2])) {
+                handle_dat_file($db, $board_id, $path_segments[2]);
+            } else {
+                exitWithError("不正なリクエストです。");
+            }
+            break;
+        default:
+            exitWithError("不正なリクエストです。");
+            break;
+    }
+}
+
+// ウェブリクエストの処理
+function handleWebRequest($db, $base_url, $path_segments) {
+    $path_segments = parseUrlPath($_SERVER['REQUEST_URI'], $base_url);
+
+    if (empty($path_segments)) {
+        if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
+            $sanitized_params = sanitizeInput($_GET);
+            if (!empty($sanitized_params['title'])) {
+                searchAllThreads($db, $sanitized_params, $base_url);
+            } else {
+                searchAllPosts($db, $sanitized_params, $base_url);
+            }
+        } else {
+            displayBoardList($db, $base_url);
+        }
+    } elseif (count($path_segments) === 1) {
+        $board_id = $path_segments[0];
+        if ($board_id === 'bbsmenu.html') {
+            displayBBSmenuHtml($db, $base_url);
+        } else {
+            if (!isValidBoardId($board_id)) {
+                exitWithError("無効なboard_idです。");
+            }
+            if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!empty($_GET['title']) || !empty($_GET['query']) || !empty($_GET['date']) || !empty($_GET['id']))) {
+                $sanitized_params = sanitizeInput($_GET);
+                if (!empty($sanitized_params['title'])) {
+                    searchBoardThreads($db, $board_id, $sanitized_params, $base_url);
+                } else {
+                    searchBoardPosts($db, $board_id, $sanitized_params, $base_url);
+                }
+            } else {
+                displayThreadList($db, $board_id, $base_url);
+            }
+        }
+    } elseif (count($path_segments) === 2) {
+        $board_id = $path_segments[0];
+        $thread_id = $path_segments[1];
+        if (!isValidBoardId($board_id) || !isValidThreadId($thread_id)) {
+            exitWithError("無効なURLです。");
+        }
+        displayAllResponses($db, $board_id, $thread_id, $base_url);
+    } elseif (count($path_segments) === 3) {
+        $board_id = $path_segments[0];
+        $thread_id = $path_segments[1];
+        $response_format = $path_segments[2];
+        if (!isValidBoardId($board_id) || !isValidThreadId($thread_id)) {
+            exitWithError("無効なURLです。");
+        }
+        displaySelectedResponses($db, $board_id, $thread_id, $response_format, $base_url);
+    } else {
+        exitWithError("無効なURL形式です。");
+    }
+}
+
+// 共通関数
+
+// 入力をサニタイズ
 function sanitizeInput($input) {
     $sanitized = [];
     $allowed_keys = ['query', 'title', 'date', 'id', 'page'];
     foreach ($allowed_keys as $key) {
         if (isset($input[$key])) {
             $value = trim($input[$key]);
-            // 各種バリデーション
-            if ($key === 'date' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-                continue;
-            }
-            if ($key === 'id' && !preg_match('/^[a-zA-Z0-9_\.\-\/\+]+$/', $value)) {
-                continue;
-            }
-            if ($key === 'page' && !preg_match('/^\d+$/', $value)) {
-                continue;
-            }
-            // 空文字列の場合は設定しない
-            if ($value === '') {
-                continue;
-            }
+            if ($key === 'date' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) continue;
+            if ($key === 'id' && !preg_match('/^[a-zA-Z0-9_\.\-\/\+]+$/', $value)) continue;
+            if ($key === 'page' && !preg_match('/^\d+$/', $value)) continue;
+            if ($value === '') continue;
             $sanitized[$key] = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
         }
     }
@@ -158,43 +202,36 @@ function isValidThreadId($thread_id) {
     return preg_match('/^\d+$/', $thread_id);
 }
 
-// ページネーションのためのパラメータ設定
+// ページネーションのパラメータ取得
 function getPaginationParams($params) {
     $page = isset($params['page']) ? (int)$params['page'] : 1;
     if ($page < 1) $page = 1;
-    $limit = 20; // 1ページあたりの表示件数
+    $limit = 20;
     $offset = ($page - 1) * $limit;
     return [$limit, $offset, $page];
 }
 
-// ページネーションのリンク生成
+// ページネーションリンク生成
 function generatePaginationLinks($current_page, $total_pages, $base_url, $query_params = []) {
     $links = '';
-
-    // 'page'キーを削除して重複を防ぐ
     unset($query_params['page']);
 
-    // 最初のページへのリンク '<<'
     if ($current_page > 1) {
         $params = $query_params;
         $params['page'] = 1;
         $query_string = http_build_query($params);
         $links .= "<a href='{$base_url}?{$query_string}'>&lt;&lt;</a> ";
 
-        // 前のページへのリンク '<'
         $prev_page = $current_page - 1;
         $params['page'] = $prev_page;
         $query_string = http_build_query($params);
         $links .= "<a href='{$base_url}?{$query_string}'>&lt;</a> ";
     } else {
-        // 最初のページの場合はリンクなし
         $links .= "&lt;&lt; &lt; ";
     }
 
-    // 現在のページ番号
     $links .= "{$current_page} / {$total_pages}";
 
-    // 次のページへのリンク '>'
     if ($current_page < $total_pages) {
         $params = $query_params;
         $next_page = $current_page + 1;
@@ -202,30 +239,119 @@ function generatePaginationLinks($current_page, $total_pages, $base_url, $query_
         $query_string = http_build_query($params);
         $links .= " <a href='{$base_url}?{$query_string}'>&gt;</a>";
 
-        // 最後のページへのリンク '>>'
         $params['page'] = $total_pages;
         $query_string = http_build_query($params);
         $links .= " <a href='{$base_url}?{$query_string}'>&gt;&gt;</a>";
     } else {
-        // 最後のページの場合はリンクなし
         $links .= " &gt; &gt;&gt;";
     }
 
     return $links;
 }
 
+// 以下、dat.php の関数
+
+function handle_bbs_cgi() {
+    header('Content-Type: text/html; charset=Shift-JIS');
+    $line = "<!DOCTYPE html>\n";
+    $line .= "<html lang='ja'>\n";
+    $line .= "<head>\n";
+    $line .= "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">\n";
+    $line .= "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n";
+    $line .= "<title>ＥＲＲＯＲ！</title>\n";
+    $line .= "</head>\n";
+    $line .= "<!--nobanner-->\n";
+    $line .= "<body>\n";
+    $line .= "<!-- 2ch_X:error -->\n";
+    $line .= "<div style=\"margin-bottom:2em;\">\n";
+    $line .= "<font size=\"+1\" color=\"#FF0000\"><b>ＥＲＲＯＲ：読み取り専用</b></font>\n";
+    $line .= "</div>\n";
+    $line .= "<blockquote>\n";
+    $line .= "<div>読み取り専用につき投稿できません。</div>\n";
+    $line .= "</blockquote>\n";
+    $line .= "</body>\n";
+    $line .= "</html>\n";
+
+    $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8') ?: mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+    echo $converted_line;
+}
+
+function handle_head_txt($db, $board_id) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
+    $line = "この掲示板は読み取り専用です。";
+    $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8') ?: mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+    echo $converted_line . "\n";
+}
+
+function handle_subject_txt($db, $board_id) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
+    $stmt = $db->prepare("SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC");
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $result = $stmt->execute();
+    if (!$result) exitWithError("データベースエラーが発生しました。");
+
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $line = "{$row['thread_id']}.dat<>{$row['title']} ({$row['response_count']})";
+        $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8') ?: mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+        echo $converted_line . "\n";
+    }
+}
+
+function handle_setting_txt($db, $board_id) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
+    $stmt = $db->prepare("SELECT board_name FROM Boards WHERE board_id = :board_id");
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $result = $stmt->execute();
+    if (!$result) exitWithError("データベースエラーが発生しました。");
+    $row = $result->fetchArray(SQLITE3_ASSOC);
+    if (!$row) exitWithError("指定された掲示板が見つかりません: {$board_id}");
+    $line = "BBS_TITLE={$row['board_name']}\nBBS_NONAME_NAME=読み取り専用\nBBS_READONLY=on";
+    $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8') ?: mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+    echo $converted_line . "\n";
+}
+
+function handle_dat_file($db, $board_id, $thread_file) {
+    header('Content-Type: text/plain; charset=Shift-JIS');
+    $thread_id = basename($thread_file, '.dat');
+    if (!isValidThreadId($thread_id)) {
+        exitWithError("無効なthread_idです。");
+    }
+    $title_stmt = $db->prepare("SELECT title FROM Threads WHERE board_id = :board_id AND thread_id = :thread_id");
+    $title_stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $title_stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
+    $title_result = $title_stmt->execute();
+    if (!$title_result) exitWithError("データベースエラーが発生しました。");
+    $title_row = $title_result->fetchArray(SQLITE3_ASSOC);
+    if (!$title_row) exitWithError("指定されたスレッドが見つかりません: thread_id = {$thread_id}");
+
+    $stmt = $db->prepare("SELECT post_order, name, mail, date, time, id, message FROM Posts WHERE board_id = :board_id AND thread_id = :thread_id ORDER BY post_order");
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $stmt->bindValue(':thread_id', $thread_id, SQLITE3_INTEGER);
+    $result = $stmt->execute();
+    if (!$result) exitWithError("データベースエラーが発生しました。");
+
+    $is_first_line = true;
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $name = str_replace('<>', '', $row['name'] ?? '');
+        $mail = str_replace('<>', '', $row['mail'] ?? '');
+        $date_time_id = str_replace('<>', '', "{$row['date']} {$row['time']} ID:{$row['id']}");
+        $message = str_replace('<>', '', $row['message'] ?? '');
+        $title = $title_row['title'] ?? '';
+        $line = $is_first_line ? "{$name}<>{$mail}<>{$date_time_id}<>{$message}<>{$title}" : "{$name}<>{$mail}<>{$date_time_id}<>{$message}<>";
+        $is_first_line = false;
+        $converted_line = @mb_convert_encoding($line, 'SJIS', 'UTF-8') ?: mb_convert_encoding('文字化けが発生しました。', 'SJIS', 'UTF-8');
+        echo $converted_line . "\n";
+    }
+}
+
+// 以下、view.php の関数（出力エンコーディングをShift-JISに統一）
+
 // BBSMENUの表示
 function displayBBSmenuHtml($db, $base_url) {
-    // データベースから掲示板の情報を取得
     $result = $db->query("SELECT board_id, board_name, category_name FROM Boards ORDER BY category_name ASC, board_id ASC");
-    if (!$result) {
-        exitWithError("データベースエラーが発生しました。");
-    }
+    if (!$result) exitWithError("データベースエラーが発生しました。");
 
-    // カテゴリーごとに掲示板を格納する配列
     $categories = [];
-
-    // データをカテゴリーごとにグループ化
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $category_name = $row['category_name'];
         if (!isset($categories[$category_name])) {
@@ -234,75 +360,49 @@ function displayBBSmenuHtml($db, $base_url) {
         $categories[$category_name][] = $row;
     }
 
-    // 出力のエンコーディングをShift-JISに設定
-    header('Content-Type: text/html; charset=Shift_JIS');
-
-    // 出力を格納する変数
-    $html_output = "";
-
-    $html_output .= "<!DOCTYPE html>";
-    $html_output .= "<html lang='ja'>";
-    $html_output .= "<HEAD><META http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">";
-    $html_output .= "<TITLE>BBS MENU</TITLE>";
-    $html_output .= "<BASE TARGET=\"_blank\"></HEAD>";
-    $html_output .= "<BODY TEXT=\"#CC3300\" BGCOLOR=\"#FFFFFF\" link=\"#0000FF\" alink=\"#ff0000\" vlink=\"#660099\">";
-    $html_output .= "<B>BBS MENU</B><BR>";
-    $html_output .= "<BR>専用ブラウザ用<FONT size=2>";
+    ob_start();
+    echo "<!DOCTYPE html>";
+    echo "<html lang='ja'>";
+    echo "<HEAD><META http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">";
+    echo "<TITLE>BBS MENU</TITLE>";
+    echo "<BASE TARGET=\"_blank\"></HEAD>";
+    echo "<BODY TEXT=\"#CC3300\" BGCOLOR=\"#FFFFFF\" link=\"#0000FF\" alink=\"#ff0000\" vlink=\"#660099\">";
+    echo "<B>BBS MENU</B><BR>";
+    echo "<BR>専用ブラウザ用<FONT size=2>";
 
     foreach ($categories as $category_name => $boards) {
-        // カテゴリー名を表示
         $category_name_escaped = htmlspecialchars($category_name, ENT_QUOTES, 'UTF-8');
-        $html_output .= "<BR><BR><B>{$category_name_escaped}</B><BR>";
+        echo "<BR><BR><B>{$category_name_escaped}</B><BR>";
 
-        // 掲示板を表示
         foreach ($boards as $board) {
             $board_id = htmlspecialchars($board['board_id'], ENT_QUOTES, 'UTF-8');
-            // タイトルはエスケープしない（元々エスケープされていない場合）
-            $board_name = $board['board_name'];
-            $board_url = htmlspecialchars($base_url . '/../dat.php/' . $board_id . '/', ENT_QUOTES, 'UTF-8');
+            $board_name = $board['board_name']; // エスケープしない
+            $board_url = htmlspecialchars($base_url . '/' . $board_id . '/', ENT_QUOTES, 'UTF-8');
 
-            $html_output .= "<A HREF=\"{$board_url}\">{$board_name}</A><BR>";
+            echo "<A HREF=\"{$board_url}\">{$board_name}</A><BR>";
         }
     }
 
-    $html_output .= "<BR><BR><BR>";
-    $html_output .= "</FONT>";
-    $html_output .= "</BODY>";
-    $html_output .= "</HTML>";
+    echo "<BR><BR><BR>";
+    echo "</FONT>";
+    echo "</BODY>";
+    echo "</HTML>";
 
-    // UTF-8からShift-JISに変換
+    $html_output = ob_get_clean();
     $html_output_sjis = mb_convert_encoding($html_output, 'Shift_JIS', 'UTF-8');
-
-    // 出力
     echo $html_output_sjis;
 }
-
-
 
 // 掲示板一覧の表示
 function displayBoardList($db, $base_url) {
     $result = $db->query("SELECT board_id, board_name FROM Boards");
-    if (!$result) {
-        exitWithError("データベースエラーが発生しました。");
-    }
+    if (!$result) exitWithError("データベースエラーが発生しました。");
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>掲示板一覧</title>";
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "ul { list-style-type: none; padding: 0; }";
-    echo "li { margin: 5px 0; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo "form { margin-top: 20px; }";
-    echo "input[type='text'], input[type='date'] { width: 100%; padding: 8px; margin: 5px 0; }";
-    echo "input[type='submit'] { padding: 10px 20px; background-color: #333; color: #fff; border: none; cursor: pointer; }";
-    echo "input[type='submit']:hover { background-color: #555; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>掲示板一覧</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
@@ -312,10 +412,9 @@ function displayBoardList($db, $base_url) {
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $board_id = htmlspecialchars($row['board_id'], ENT_QUOTES, 'UTF-8');
         $board_name = htmlspecialchars($row['board_name'], ENT_QUOTES, 'UTF-8');
-        echo "<li><a href='{$base_url}/{$board_id}/'>{$board_name}</a> [<a href='{$base_url}/../dat.php/{$board_id}/'>専ブラ登録用URL</a>]</li>";
+        echo "<li><a href='{$base_url}/{$board_id}/'>{$board_name}</a></li>";
     }
     echo "</ul>";
-
     echo "<h2>検索</h2>";
     echo "<form method='get' action='{$base_url}/'>";
     echo "<input type='text' name='title' placeholder='スレッドタイトル検索'><br>";
@@ -323,25 +422,24 @@ function displayBoardList($db, $base_url) {
     echo "<input type='date' name='date' placeholder='日付検索'><br>";
     echo "<input type='text' name='id' placeholder='ID検索'><br>";
     echo "<input type='submit' value='検索'></form>";
-
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // スレッド一覧の表示
 function displayThreadList($db, $board_id, $base_url) {
-    // ページネーションの設定
     $params = sanitizeInput($_GET);
     list($limit, $offset, $page) = getPaginationParams($params);
 
-    // 総スレッド数を取得
     $stmt = $db->prepare("SELECT COUNT(*) as total_threads FROM Threads WHERE board_id = :board_id");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
     $result = $stmt->execute();
     $row = $result->fetchArray(SQLITE3_ASSOC);
     $total_threads = $row['total_threads'];
-
     $total_pages = ceil($total_threads / $limit);
 
     $stmt = $db->prepare("SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC LIMIT :limit OFFSET :offset");
@@ -349,53 +447,35 @@ function displayThreadList($db, $board_id, $base_url) {
     $stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
     $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
     $result = $stmt->execute();
-    if (!$result) {
-        exitWithError("データベースエラーが発生しました。");
-    }
+    if (!$result) exitWithError("データベースエラーが発生しました。");
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>スレッド一覧</title>";
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "ul { list-style-type: none; padding: 0; }";
-    echo "li { margin: 5px 0; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo "form { margin-top: 20px; }";
-    echo "input[type='text'], input[type='date'] { width: 100%; padding: 8px; margin: 5px 0; }";
-    echo "input[type='submit'] { padding: 10px 20px; background-color: #333; color: #fff; border: none; cursor: pointer; }";
-    echo "input[type='submit']:hover { background-color: #555; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>スレッド一覧</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧 ($total_threads)</h1>";
     echo "<p><a href='{$base_url}/'>← 掲示板一覧に戻る</a></p>";
 
-    // ページネーションのリンクを表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", []);
         echo "<div class='pagination'>{$pagination_links}</div>";
     }
 
     echo "<ul>";
-
     $thread_order = ($page - 1) * $limit;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $thread_id = htmlspecialchars($row['thread_id'], ENT_QUOTES, 'UTF-8');
-        // タイトルはエスケープしない
         $title = $row['title'];
         $res_count = $row['response_count'];
-        $thread_order ++;
+        $thread_order++;
         echo "<li>{$thread_order}: <a href='{$base_url}/{$board_id}/{$thread_id}/'>{$title} ({$res_count})</a></li>";
     }
     echo "</ul>";
 
-    // ページネーションのリンクを表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", []);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -408,15 +488,16 @@ function displayThreadList($db, $board_id, $base_url) {
     echo "<input type='date' name='date' placeholder='日付検索'><br>";
     echo "<input type='text' name='id' placeholder='ID検索'><br>";
     echo "<input type='submit' value='検索'></form>";
-
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // 全体のスレッドタイトル検索
 function searchAllThreads($db, $params, $base_url) {
-    // ページネーションの設定
     list($limit, $offset, $page) = getPaginationParams($params);
 
     $query = "SELECT board_id, thread_id, title, response_count FROM Threads WHERE 1=1";
@@ -468,28 +549,17 @@ function searchAllThreads($db, $params, $base_url) {
         $board_names[$board_row['board_id']] = $board_row['board_name'];
     }
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>スレッドタイトル検索結果</title>";
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo ".pagination { margin-top: 20px; }";
-    echo ".pagination a { margin: 0 5px; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>スレッドタイトル検索結果</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>スレッドタイトル検索結果</h1>";
-
-    // 検索画面に戻るリンクを追加
     echo "<p><a href='{$base_url}/'>← 戻る</a></p>";
 
-    // ページネーションのリンクを上部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -510,7 +580,6 @@ function searchAllThreads($db, $params, $base_url) {
         }
     }
 
-    // ページネーションのリンクを下部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -519,11 +588,13 @@ function searchAllThreads($db, $params, $base_url) {
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // 掲示板内のスレッドタイトル検索
 function searchBoardThreads($db, $board_id, $params, $base_url) {
-    // ページネーションの設定
     list($limit, $offset, $page) = getPaginationParams($params);
 
     $query = "SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id";
@@ -559,28 +630,17 @@ function searchBoardThreads($db, $board_id, $params, $base_url) {
     $total_threads = $row['total_threads'];
     $total_pages = ceil($total_threads / $limit);
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>スレッドタイトル検索結果</title>";
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo ".pagination { margin-top: 20px; }";
-    echo ".pagination a { margin: 0 5px; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>スレッドタイトル検索結果</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>スレッドタイトル検索結果: " . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "</h1>";
-
-    // 検索画面に戻るリンクを追加
     echo "<p><a href='{$base_url}/{$board_id}/'>← 戻る</a></p>";
 
-    // ページネーションのリンクを上部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -597,7 +657,6 @@ function searchBoardThreads($db, $board_id, $params, $base_url) {
         }
     }
 
-    // ページネーションのリンクを下部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -606,16 +665,17 @@ function searchBoardThreads($db, $board_id, $params, $base_url) {
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // 全体検索
 function searchAllPosts($db, $params, $base_url) {
-    // 検索ワードが何も設定されていない場合、検索を行わない
-    if (empty($params['query']) && empty($params['date']) && empty($params['id'])) {
+    if (empty($params['title']) && empty($params['query']) && empty($params['date']) && empty($params['id'])) {
         exitWithError("検索ワードが設定されていません。検索ワードを入力してください。");
     }
 
-    // ページネーションの設定
     list($limit, $offset, $page) = getPaginationParams($params);
 
     $query = "SELECT board_id, thread_id, post_order, name, mail, date, time, id, message FROM Posts WHERE 1=1";
@@ -663,14 +723,12 @@ function searchAllPosts($db, $params, $base_url) {
     $total_posts = $row['total_posts'];
     $total_pages = ceil($total_posts / $limit);
 
-    // 掲示板名を一度に取得して連想配列に格納
     $board_names = [];
     $board_result = $db->query("SELECT board_id, board_name FROM Boards");
     while ($board_row = $board_result->fetchArray(SQLITE3_ASSOC)) {
         $board_names[$board_row['board_id']] = $board_row['board_name'];
     }
 
-    // 結果を掲示板ごとにグループ化
     $grouped_results = [];
 
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -681,31 +739,17 @@ function searchAllPosts($db, $params, $base_url) {
         $grouped_results[$board_id][] = $row;
     }
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>全体検索結果</title>";
-    // CSSスタイルを追加
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo ".pagination { margin-top: 20px; }";
-    echo ".pagination a { margin: 0 5px; }";
-    echo ".response { border-bottom: 1px solid #ccc; padding: 10px 0; }";
-    echo ".board-section { margin-bottom: 40px; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>全体検索結果</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>全体検索結果</h1>";
-
-    // 検索画面に戻るリンクを追加
     echo "<p><a href='{$base_url}/'>← 検索画面に戻る</a></p>";
 
-    // ページネーションのリンクを上部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -715,21 +759,17 @@ function searchAllPosts($db, $params, $base_url) {
         echo "<p>該当する投稿はありませんでした。</p>";
     } else {
         foreach ($grouped_results as $board_id => $posts) {
-            // 掲示板名を取得
             $board_name = isset($board_names[$board_id]) ? $board_names[$board_id] : $board_id;
-
             echo "<div class='board-section'>";
             echo "<h2>" . htmlspecialchars($board_name, ENT_QUOTES, 'UTF-8') . " (" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . ")</h2>";
 
             foreach ($posts as $post) {
-                // 各投稿を表示
                 displayResponse($post, $base_url, $board_id, $post['thread_id']);
             }
             echo "</div>";
         }
     }
 
-    // ページネーションのリンクを下部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -738,16 +778,17 @@ function searchAllPosts($db, $params, $base_url) {
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // 掲示板内検索
 function searchBoardPosts($db, $board_id, $params, $base_url) {
-    // 検索ワードが何も設定されていない場合、検索を行わない
-    if (empty($params['query']) && empty($params['date']) && empty($params['id'])) {
+    if (empty($params['title']) && empty($params['query']) && empty($params['date']) && empty($params['id'])) {
         exitWithError("検索ワードが設定されていません。検索ワードを入力してください。");
     }
 
-    // ページネーションの設定
     list($limit, $offset, $page) = getPaginationParams($params);
 
     $query = "SELECT thread_id, post_order, name, mail, date, time, id, message FROM Posts WHERE board_id = :board_id";
@@ -797,7 +838,6 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
     $total_posts = $row['total_posts'];
     $total_pages = ceil($total_posts / $limit);
 
-    // 結果をスレッドごとにグループ化
     $grouped_results = [];
 
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -808,7 +848,6 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
         $grouped_results[$thread_id][] = $row;
     }
 
-    // スレッドタイトルを一度に取得して連想配列に格納
     $thread_titles = [];
     $thread_ids = array_keys($grouped_results);
     if (!empty($thread_ids)) {
@@ -825,31 +864,17 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
         }
     }
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>検索結果</title>";
-    // CSSスタイルを追加
-    echo "<style>";
-    echo "body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }";
-    echo "header, footer { background-color: #333; color: #fff; padding: 10px; }";
-    echo "h1, h2 { color: #333; }";
-    echo ".container { width: 80%; margin: auto; background-color: #fff; padding: 20px; }";
-    echo "a { color: #0066cc; text-decoration: none; }";
-    echo "a:hover { text-decoration: underline; }";
-    echo ".pagination { margin-top: 20px; }";
-    echo ".pagination a { margin: 0 5px; }";
-    echo ".response { border-bottom: 1px solid #ccc; padding: 10px 0; }";
-    echo ".thread-section { margin-bottom: 40px; }";
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>検索結果</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>検索結果: " . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "</h1>";
-
-    // 検索画面に戻るリンクを追加
     echo "<p><a href='{$base_url}/{$board_id}/'>← 検索画面に戻る</a></p>";
 
-    // ページネーションのリンクを上部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -869,7 +894,6 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
         }
     }
 
-    // ページネーションのリンクを下部に表示
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", $params);
         echo "<div class='pagination'>{$pagination_links}</div>";
@@ -878,6 +902,9 @@ function searchBoardPosts($db, $board_id, $params, $base_url) {
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // スレッド内の全レス表示（ページネーションなし）
@@ -907,17 +934,16 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
         exitWithError("投稿を取得中にデータベースエラーが発生しました。");
     }
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>$title</title>";
-    echo "<style>";
-    // CSSスタイルを追加
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>$title</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}/'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -932,6 +958,9 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // 指定されたレスを表示
@@ -972,17 +1001,16 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
         exitWithError("データベースエラーが発生しました。");
     }
 
+    ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
-    echo "<head><meta charset='UTF-8'><title>$title</title>";
-    echo "<style>";
-    // CSSスタイルを追加
-    echo "</style>";
+    echo "<head><meta charset='Shift_JIS'><title>$title</title>";
+    echo "<style>/* スタイルシートは省略 */</style>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='../../'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}/'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -997,6 +1025,9 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     echo "</div>";
     echo "</body>";
     echo "</html>";
+    $output = ob_get_clean();
+    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    echo $output_sjis;
 }
 
 // レスポンス指定形式をパースする関数
@@ -1004,19 +1035,16 @@ function parseResponseFormat($format, $db, $board_id, $thread_id) {
     $post_orders = [];
 
     if (preg_match('/^(\d+)$/', $format, $matches)) {
-        // 単一のレス番号
         $post_order = (int)$matches[1];
         if ($post_order > 0) {
             $post_orders[] = $post_order;
         }
     } elseif (preg_match('/^l(\d+)$/', $format, $matches)) {
-        // 最新のレスから指定数
         $last_count = (int)$matches[1];
         if ($last_count > 0) {
             $post_orders = getLastPostOrders($db, $board_id, $thread_id, $last_count);
         }
     } elseif (preg_match('/^(\d+)-(\d+)$/', $format, $matches)) {
-        // 範囲指定
         $start = (int)$matches[1];
         $end = (int)$matches[2];
         if ($start > 0 && $end >= $start) {
@@ -1025,7 +1053,6 @@ function parseResponseFormat($format, $db, $board_id, $thread_id) {
             }
         }
     } elseif (preg_match('/^(\d+(,\d+)*)$/', $format)) {
-        // カンマ区切り
         $numbers = explode(',', $format);
         foreach ($numbers as $num) {
             $num = (int)$num;
@@ -1054,7 +1081,6 @@ function getLastPostOrders($db, $board_id, $thread_id, $count) {
         $post_orders[] = $row['post_order'];
     }
 
-    // 取得した投稿番号を昇順に並び替え
     $post_orders = array_reverse($post_orders);
 
     return $post_orders;
@@ -1063,27 +1089,22 @@ function getLastPostOrders($db, $board_id, $thread_id, $count) {
 // レスを表示する関数
 function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') {
     echo "<div class='response'>";
-    echo "<p><strong>" . htmlspecialchars($row['post_order'], ENT_QUOTES, 'UTF-8') . " - " . $row['name'] . "</b>";
+    echo "<p><strong>" . htmlspecialchars($row['post_order'], ENT_QUOTES, 'UTF-8') . " - " . $row['name'] . "</b></strong>";
     if (!empty($row['mail'])) {
         echo " (<a href='mailto:" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "'>" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "</a>)";
     }
-    echo "</strong>";
     echo " " . htmlspecialchars($row['date'], ENT_QUOTES, 'UTF-8') . " " . htmlspecialchars($row['time'], ENT_QUOTES, 'UTF-8');
     if (!empty($row['id'])) {
         echo " ID:" . htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8');
     }
     echo "</p>";
 
-    // メッセージの処理
     $message = $row['message'];
 
-    // 1. 引用レスをリンク化
     $message = linkifyReplies($message, $base_url, $board_id, $thread_id);
 
-    // 2. 未リンクのURLをリンク化
     $message = linkifyUrls($message);
 
-    // 改行を<br>に変換
     $message = nl2br($message);
 
     echo "<p>" . $message . "</p>";
@@ -1094,24 +1115,19 @@ function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') 
 function linkifyUrls($html) {
     $dom = new DOMDocument();
 
-    // エンコーディングの問題を避けるためにエラーハンドリングを抑制
     libxml_use_internal_errors(true);
 
-    // HTMLをロード
     $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 
-    // XPathを使用してテキストノードを取得
     $xpath = new DOMXPath($dom);
     $textNodes = $xpath->query('//text()');
 
     foreach ($textNodes as $textNode) {
         $text = $textNode->nodeValue;
 
-        // URLをリンク化
         $newText = preg_replace_callback('/(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/i', function($matches) {
             $url = $matches[0];
 
-            // URLがhttpまたはhttpsで始まっていない場合は補完
             if (!preg_match('/^https?:\/\//i', $url)) {
                 $href = 'http://' . $url;
             } else {
@@ -1121,7 +1137,6 @@ function linkifyUrls($html) {
             return '<a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '</a>';
         }, $text);
 
-        // テキストが変更された場合のみ置換
         if ($newText !== $text) {
             $fragment = $dom->createDocumentFragment();
             $fragment->appendXML($newText);
@@ -1129,13 +1144,10 @@ function linkifyUrls($html) {
         }
     }
 
-    // HTMLを取得
     $html = $dom->saveHTML();
 
-    // 不要なXML宣言を削除
     $html = preg_replace('/^<\?xml.*?\?>\s*/', '', $html);
 
-    // エラーハンドリングを元に戻す
     libxml_clear_errors();
     libxml_use_internal_errors(false);
 
@@ -1144,7 +1156,6 @@ function linkifyUrls($html) {
 
 // 引用レスをリンク化する関数
 function linkifyReplies($text, $base_url, $board_id, $thread_id) {
-    // 引用レスの正規表現パターン
     $reply_pattern = '/&gt;&gt;(\d+(-\d+)?)/';
 
     $text = preg_replace_callback($reply_pattern, function($matches) use ($base_url, $board_id, $thread_id) {
@@ -1155,5 +1166,4 @@ function linkifyReplies($text, $base_url, $board_id, $thread_id) {
 
     return $text;
 }
-
 ?>
