@@ -116,7 +116,7 @@ function sanitizeInput($input) {
             if ($key === 'date' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
                 continue;
             }
-            if ($key === 'id' && !preg_match('/^[a-zA-Z0-9]+$/', $value)) {
+            if ($key === 'id' && !preg_match('/^[a-zA-Z0-9_\.\-\/\+]+$/', $value)) {
                 continue;
             }
             if ($key === 'page' && !preg_match('/^\d+$/', $value)) {
