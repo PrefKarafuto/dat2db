@@ -192,7 +192,7 @@ function displayBoardList($db, $base_url) {
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $board_id = htmlspecialchars($row['board_id'], ENT_QUOTES, 'UTF-8');
         $board_name = htmlspecialchars($row['board_name'], ENT_QUOTES, 'UTF-8');
-        echo "<li><a href='{$base_url}/{$board_id}'>{$board_name}</a> [<a href='{$base_url}/../dat.php/{$board_id}/'>専ブラ登録用URL</a>]</li>";
+        echo "<li><a href='{$base_url}/{$board_id}/'>{$board_name}</a> [<a href='{$base_url}/../dat.php/{$board_id}/'>専ブラ登録用URL</a>]</li>";
     }
     echo "</ul>";
 
