@@ -329,7 +329,7 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='./'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -396,7 +396,7 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='./'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
