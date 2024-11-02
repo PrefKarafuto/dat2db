@@ -194,7 +194,7 @@ function sanitizeInput($input) {
 
 // board_idのバリデーション
 function isValidBoardId($board_id) {
-    return preg_match('/^[a-zA-Z0-9_\-]+$/', $board_id);
+    return preg_match('/^(?!test$)(?!dat$)[a-zA-Z0-9_\-]+$/', $board_id);
 }
 
 // thread_idのバリデーション
@@ -441,6 +441,7 @@ function displayThreadList($db, $board_id, $base_url) {
     $row = $result->fetchArray(SQLITE3_ASSOC);
     $total_threads = $row['total_threads'];
     $total_pages = ceil($total_threads / $limit);
+    if (!$total_threads) exitWithError("そのような掲示板はありません。");
 
     $stmt = $db->prepare("SELECT thread_id, title, response_count FROM Threads WHERE board_id = :board_id ORDER BY thread_id DESC LIMIT :limit OFFSET :offset");
     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
