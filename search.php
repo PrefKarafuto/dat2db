@@ -65,11 +65,6 @@ if ($search_query !== '') {
         die("<p>検索クエリが長すぎます。100文字以内にしてください。</p>");
     }
 
-    // 禁止文字のチェック（SQLインジェクション対策）
-    if (preg_match('/[\'\";]|--/', $search_query)) {
-        die("<p>検索クエリに不正な文字が含まれています。</p>");
-    }
-
     // 基本となるSQLクエリの構築
     $sql = "SELECT Threads.board_id, Threads.thread_id, Threads.title, Threads.response_count, 
                    Boards.category_name, Boards.board_name
@@ -83,20 +78,14 @@ if ($search_query !== '') {
 
     if ($search_type === 'full') {
         $conditions[] = "(Posts.name LIKE :query OR Posts.mail LIKE :query OR Posts.id LIKE :query OR Posts.message LIKE :query)";
-        $params[':query'] = '%' . $search_query . '%';
+    } elseif ($search_type === 'message') {
+        $conditions[] = "Posts.message LIKE :query";
     } elseif ($search_type === 'title') {
         $conditions[] = "Threads.title LIKE :query";
-        $params[':query'] = '%' . $search_query . '%';
     } elseif ($search_type === 'id') {
-        // Posts.idが数値の場合は整数としてバインド
-        if (ctype_digit($search_query)) {
-            $conditions[] = "Posts.id = :query_exact";
-            $params[':query_exact'] = intval($search_query);
-        } else {
-            // 数値でない場合は該当なし
-            $conditions[] = "1=0"; // 常に偽
-        }
-    }
+        $conditions[] = "Posts.id LIKE :query";
+    }    
+    $params[':query'] = '%' . $search_query . '%';
 
     // スコープに応じた条件追加
     if ($scope === 'board') {
@@ -130,12 +119,7 @@ if ($search_query !== '') {
                   ) as subquery";
     $count_stmt = $db->prepare($count_sql);
     foreach ($params as $key => $value) {
-        // Posts.idが整数の場合、適切にバインド
-        if ($key === ':query_exact' && is_int($value)) {
-            $count_stmt->bindValue($key, $value, SQLITE3_INTEGER);
-        } else {
             $count_stmt->bindValue($key, $value, SQLITE3_TEXT);
-        }
     }
     $count_result = $count_stmt->execute();
     if ($count_row = $count_result->fetchArray(SQLITE3_ASSOC)) {
@@ -150,11 +134,7 @@ if ($search_query !== '') {
 
     // パラメータのバインド
     foreach ($params as $key => $value) {
-        if ($key === ':query_exact' && is_int($value)) {
-            $stmt->bindValue($key, $value, SQLITE3_INTEGER);
-        } else {
-            $stmt->bindValue($key, $value, SQLITE3_TEXT);
-        }
+        $stmt->bindValue($key, $value, SQLITE3_TEXT);
     }
     $stmt->bindValue(':limit', $limit, SQLITE3_INTEGER);
     $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
@@ -296,7 +276,7 @@ foreach ($results as $row) {
                 <div class="form-group" style="flex: 1 1 30%;">
                     <select name="search_type" id="search_type">
                         <option value="title" <?php if ($search_type === 'title') echo 'selected'; ?>>スレタイ検索</option>
-                        <option value="full" <?php if ($search_type === 'full') echo 'selected'; ?>>全文検索</option>
+                        <option value="message" <?php if ($search_type === 'message') echo 'selected'; ?>>本文検索</option>
                         <option value="id" <?php if ($search_type === 'id') echo 'selected'; ?>>ID検索</option>
                     </select>
                 </div>
