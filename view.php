@@ -171,7 +171,7 @@ function displayBoardList($db, $base_url) {
     echo "<div class='container'>";
     echo "<h1>掲示板一覧</h1>";
     echo "<p><a href=\"search.php\">検索</a></p>";
-    echo "<p><a href=\"./bbsmenu.html\">専ブラ用BBSMENU</a></p>";
+    echo "<p><a href=\"{$base_url}/bbsmenu.html\">専ブラ用BBSMENU</a></p>";
     echo "<ul>";
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $board_id = htmlspecialchars($row['board_id'], ENT_QUOTES, 'UTF-8');
