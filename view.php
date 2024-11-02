@@ -170,7 +170,7 @@ function displayBoardList($db, $base_url) {
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>掲示板一覧</h1>";
-    echo "<p><a href=\"../search.php\">検索</a></p>";
+    echo "<p><a href=\"search.php\">検索</a></p>";
     echo "<p><a href=\"./bbsmenu.html\">専ブラ用BBSMENU</a></p>";
     echo "<ul>";
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -216,7 +216,7 @@ function displayThreadList($db, $board_id, $base_url) {
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . "のスレッド一覧 ($total_threads)</h1>";
-    echo "<p><a href='{$base_url}/'>← 掲示板一覧に戻る</a></p>";
+    echo "<p><a href='{$base_url}'>← 掲示板一覧に戻る</a></p>";
 
     if ($total_pages > 1) {
         $pagination_links = generatePaginationLinks($page, $total_pages, "{$base_url}/{$board_id}/", []);
@@ -329,7 +329,7 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='{$base_url}/'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -396,7 +396,7 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     echo "<body>";
     echo "<div class='container'>";
     echo "<h1>$title ($res_count)</h1>";
-    echo "<a href='{$base_url}/'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
+    echo "<a href='{$base_url}'>←← 掲示板一覧に戻る</a> <a href='../'>← スレッド一覧に戻る</a>";
 
     $hasResult = false;
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
