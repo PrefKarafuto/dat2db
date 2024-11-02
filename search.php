@@ -391,7 +391,7 @@ $total_pages = ceil($total_results / $limit);
                         <option value="">掲示板を選択</option>
                         <?php foreach ($boards as $b): ?>
                             <option value="<?php echo escape_html($b['board_id']); ?>" <?php if ($board === $b['board_id']) echo 'selected'; ?>>
-                                <?php echo escape_html($b['board_name']); ?>
+                                <?php echo $b['board_name']; ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -444,11 +444,11 @@ $total_pages = ceil($total_results / $limit);
                             <?php foreach ($results as $row): ?>
                                 <tr>
                                     <td><?php echo escape_html($row['category_name']); ?></td>
-                                    <td><?php echo escape_html($row['board_name']); ?></td>
+                                    <td><?php echo $row['board_name']; ?></td>
                                     <td><?php echo escape_html($row['thread_id']); ?></td>
                                     <td>
                                         <a href="view.php/<?php echo urlencode($row['board_id']); ?>/<?php echo urlencode($row['thread_id']); ?>">
-                                            <?php echo escape_html($row['title']); ?>
+                                            <?php echo $row['title']; ?>
                                         </a>
                                     </td>
                                     <td><?php echo escape_html($row['response_count']); ?></td>
