@@ -267,7 +267,7 @@ foreach ($results as $row) {
                         <option value="">掲示板を選択</option>
                         <?php foreach ($boards as $b): ?>
                             <option value="<?php echo escape_html($b['board_id']); ?>" <?php if ($board === $b['board_id']) echo 'selected'; ?>>
-                                <?php echo escape_html($b['board_name']); ?>
+                                <?php echo $b['board_name']; ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

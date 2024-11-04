@@ -345,7 +345,7 @@ function displayAllResponses($db, $board_id, $thread_id, $base_url) {
     echo "</body>";
     echo "</html>";
     $output = ob_get_clean();
-    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    $output_sjis = mb_convert_encoding($output, 'Shift_JIS', 'UTF-8');
     echo $output_sjis;
 }
 
@@ -412,7 +412,7 @@ function displaySelectedResponses($db, $board_id, $thread_id, $response_format, 
     echo "</body>";
     echo "</html>";
     $output = ob_get_clean();
-    $output_sjis = mb_convert_encoding($output, 'SJIS', 'UTF-8');
+    $output_sjis = mb_convert_encoding($output, 'Shift_JIS', 'UTF-8');
     echo $output_sjis;
 }
 
