@@ -499,47 +499,31 @@ function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') 
 }
 
 // 未リンクのURLをリンク化する関数
-function linkifyUrls($html) {
-    $dom = new DOMDocument();
+function linkifyUrls($text) {
+    // URLのパターンを定義
+    $urlPattern = '/\b((https?:\/\/)|(www\.))([^\s<>"\']+)/i';
 
-    libxml_use_internal_errors(true);
+    // コールバック関数でURLを<a>タグに変換
+    $linkedText = preg_replace_callback($urlPattern, function($matches) {
+        $url = $matches[0];
 
-    $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-
-    $xpath = new DOMXPath($dom);
-    $textNodes = $xpath->query('//text()');
-
-    foreach ($textNodes as $textNode) {
-        $text = $textNode->nodeValue;
-
-        $newText = preg_replace_callback('/(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/i', function($matches) {
-            $url = $matches[0];
-
-            if (!preg_match('/^https?:\/\//i', $url)) {
-                $href = 'http://' . $url;
-            } else {
-                $href = $url;
-            }
-
-            return '<a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '</a>';
-        }, $text);
-
-        if ($newText !== $text) {
-            $fragment = $dom->createDocumentFragment();
-            $fragment->appendXML($newText);
-            $textNode->parentNode->replaceChild($fragment, $textNode);
+        // 'www.'で始まる場合は'http://'を追加
+        if (!preg_match('/^https?:\/\//i', $url)) {
+            $href = 'http://' . $url;
+        } else {
+            $href = $url;
         }
-    }
 
-    $html = $dom->saveHTML();
+        // htmlspecialcharsでエスケープ
+        $escapedHref = htmlspecialchars($href, ENT_QUOTES, 'UTF-8');
+        $escapedUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 
-    $html = preg_replace('/^<\?xml.*?\?>\s*/', '', $html);
+        return '<a href="' . $escapedHref . '">' . $escapedUrl . '</a>';
+    }, $text);
 
-    libxml_clear_errors();
-    libxml_use_internal_errors(false);
-
-    return $html;
+    return $linkedText;
 }
+
 
 // 引用レスをリンク化する関数
 function linkifyReplies($text, $base_url, $board_id, $thread_id) {
