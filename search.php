@@ -82,7 +82,9 @@ if ($search_query !== '') {
         $conditions[] = "Posts.message LIKE :query";
     } elseif ($search_type === 'title') {
         $conditions[] = "Threads.title LIKE :query";
-    } elseif ($search_type === 'id') {
+    } elseif ($search_type === 'name') {
+        $conditions[] = "Posts.name LIKE :query";
+    }  elseif ($search_type === 'id') {
         $conditions[] = "Posts.id LIKE :query";
     }    
     $params[':query'] = '%' . $search_query . '%';
@@ -277,6 +279,7 @@ foreach ($results as $row) {
                     <select name="search_type" id="search_type">
                         <option value="title" <?php if ($search_type === 'title') echo 'selected'; ?>>スレタイ検索</option>
                         <option value="message" <?php if ($search_type === 'message') echo 'selected'; ?>>本文検索</option>
+                        <option value="name" <?php if ($search_type === 'name') echo 'selected'; ?>>名前検索</option>
                         <option value="id" <?php if ($search_type === 'id') echo 'selected'; ?>>ID検索</option>
                     </select>
                 </div>
@@ -305,72 +308,187 @@ foreach ($results as $row) {
                         </form>
                     </div>
 
-                    <!-- タブインターフェースを廃止 -->
+<!-- 上部のページネーション -->
+<?php if ($total_pages > 1): ?>
+    <div class="pagination top">
+        <!-- 上段：現在のページ/総ページ数を中央に表示 -->
+        <div class="page-info-container">
+            <span class="page-info"><?php echo escape_html($page . '/' . $total_pages); ?></span>
+        </div>
+        <!-- 下段：ページ番号のボタン -->
+        <div class="page-buttons">
+            <?php
+                $base_query = $_GET;
+                unset($base_query['page']);
 
-                    <!-- 結果の表示 -->
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>タイトル</th>
-                                <th>レス数</th>
-                                <th>スレッド作成日時</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($results as $row): ?>
-                                <tr>
-                                    <td>
-                                        <a href="view.php/<?php echo urlencode($row['board_id']); ?>/<?php echo urlencode($row['thread_id']); ?>">
-                                            <?php echo $row['title']; ?>
-                                        </a>
-                                        <div class="board-name"><?php echo $row['board_name']; ?></div>
-                                    </td>
-                                    <td><?php echo escape_html($row['response_count']); ?></td>
-                                    <td><?php echo escape_html($row['created_at']); ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                $adjacents = 2; // 現在のページの前後に表示するページ数
 
-                    <!-- ページネーション -->
-                    <?php if ($total_pages > 1): ?>
-                        <div class="pagination">
-                            <?php
-                                // 既存のページネーションリンクに現在の検索条件を保持
-                                $base_query = $_GET;
-                                unset($base_query['page']);
+                // ページ番号の範囲を決定
+                if ($total_pages <= 7) {
+                    // 総ページ数が7以下の場合、全てのページ番号を表示
+                    $start_page = 1;
+                    $end_page = $total_pages;
+                } else {
+                    if ($page <= 4) {
+                        // 最初の方のページの場合
+                        $start_page = 1;
+                        $end_page = 5;
+                        $show_start_ellipsis = false;
+                        $show_end_ellipsis = true;
+                    } elseif ($page > $total_pages - 4) {
+                        // 最後の方のページの場合
+                        $start_page = $total_pages - 4;
+                        $end_page = $total_pages;
+                        $show_start_ellipsis = true;
+                        $show_end_ellipsis = false;
+                    } else {
+                        // 中間のページの場合
+                        $start_page = $page - 2;
+                        $end_page = $page + 2;
+                        $show_start_ellipsis = true;
+                        $show_end_ellipsis = true;
+                    }
+                }
 
-                                if ($page > 1):
-                                    $prev_page = $page - 1;
-                                    $base_query['page'] = $prev_page;
-                            ?>
-                                    <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>">&laquo; 前へ</a>
-                            <?php endif; ?>
+                // 最初のページリンク
+                if ($start_page > 1):
+                    $base_query['page'] = 1;
+            ?>
+                    <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>">1</a>
+            <?php endif; ?>
 
-                            <?php
-                                // ページ番号の表示（例: 1 2 3 4 5）
-                                $start_page = max(1, $page - 2);
-                                $end_page = min($total_pages, $page + 2);
-                                for ($i = $start_page; $i <= $end_page; $i++):
-                                    $base_query['page'] = $i;
-                                    if ($i == $page):
-                            ?>
-                                        <span class="current"><?php echo escape_html($i); ?></span>
-                                    <?php else: ?>
-                                        <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>"><?php echo escape_html($i); ?></a>
-                                    <?php endif;
-                                endfor;
-                            ?>
+            <!-- 前方の省略記号 -->
+            <?php if (isset($show_start_ellipsis) && $show_start_ellipsis): ?>
+                <span class="dots">...</span>
+            <?php endif; ?>
 
-                            <?php
-                                if ($page < $total_pages):
-                                    $next_page = $page + 1;
-                                    $base_query['page'] = $next_page;
-                            ?>
-                                    <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>">次へ &raquo;</a>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
+            <!-- 中間のページ番号の表示 -->
+            <?php
+                for ($i = $start_page; $i <= $end_page; $i++):
+                    $base_query['page'] = $i;
+                    if ($i == $page):
+            ?>
+                        <span class="current"><?php echo $i; ?></span>
+                    <?php else: ?>
+                        <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>"><?php echo $i; ?></a>
+                    <?php endif;
+                endfor;
+            ?>
+
+            <!-- 後方の省略記号 -->
+            <?php if (isset($show_end_ellipsis) && $show_end_ellipsis): ?>
+                <span class="dots">...</span>
+            <?php endif; ?>
+
+            <!-- 最後のページリンク -->
+            <?php if ($end_page < $total_pages): 
+                $base_query['page'] = $total_pages;
+            ?>
+                <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>"><?php echo $total_pages; ?></a>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
+
+
+            <!-- 結果の表示 -->
+            <table>
+                <thead>
+                    <tr>
+                        <th>タイトル</th>
+                        <th>レス数</th>
+                        <th>スレッド作成日時</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($results as $row): ?>
+                        <tr>
+                            <td>
+                                <a href="view.php/<?php echo urlencode($row['board_id']); ?>/<?php echo urlencode($row['thread_id']); ?>">
+                                    <?php echo $row['title']; ?>
+                                </a>
+                                <div class="board-name"><?php echo $row['board_name']; ?></div>
+                            </td>
+                            <td><?php echo escape_html($row['response_count']); ?></td>
+                            <td><?php echo escape_html($row['created_at']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+
+<!-- 下部のページネーション -->
+<?php if ($total_pages > 1): ?>
+    <div class="pagination">
+        <!-- 上段：現在のページ/総ページ数を中央に表示 -->
+        <div class="page-info-container">
+            <span class="page-info"><?php echo escape_html($page . '/' . $total_pages); ?></span>
+        </div>
+        <!-- 下段：ページ番号のボタン -->
+        <div class="page-buttons">
+            <?php
+                // 上部と同じロジックを使用
+                $base_query = $_GET;
+                unset($base_query['page']);
+
+                $adjacents = 2;
+
+                if ($total_pages <= 7) {
+                    $start_page = 1;
+                    $end_page = $total_pages;
+                } else {
+                    if ($page <= 4) {
+                        $start_page = 1;
+                        $end_page = 5;
+                        $show_start_ellipsis = false;
+                        $show_end_ellipsis = true;
+                    } elseif ($page > $total_pages - 4) {
+                        $start_page = $total_pages - 4;
+                        $end_page = $total_pages;
+                        $show_start_ellipsis = true;
+                        $show_end_ellipsis = false;
+                    } else {
+                        $start_page = $page - 2;
+                        $end_page = $page + 2;
+                        $show_start_ellipsis = true;
+                        $show_end_ellipsis = true;
+                    }
+                }
+
+                if ($start_page > 1):
+                    $base_query['page'] = 1;
+            ?>
+                    <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>">1</a>
+            <?php endif; ?>
+
+            <?php if (isset($show_start_ellipsis) && $show_start_ellipsis): ?>
+                <span class="dots">...</span>
+            <?php endif; ?>
+
+            <?php
+                for ($i = $start_page; $i <= $end_page; $i++):
+                    $base_query['page'] = $i;
+                    if ($i == $page):
+            ?>
+                        <span class="current"><?php echo $i; ?></span>
+                    <?php else: ?>
+                        <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>"><?php echo $i; ?></a>
+                    <?php endif;
+                endfor;
+            ?>
+
+            <?php if (isset($show_end_ellipsis) && $show_end_ellipsis): ?>
+                <span class="dots">...</span>
+            <?php endif; ?>
+
+            <?php if ($end_page < $total_pages):
+                $base_query['page'] = $total_pages;
+            ?>
+                <a href="search.php?<?php echo escape_html(http_build_query($base_query)); ?>"><?php echo $total_pages; ?></a>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
                 <?php else: ?>
                     <p>該当する結果が見つかりませんでした。</p>

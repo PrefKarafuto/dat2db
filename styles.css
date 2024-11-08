@@ -187,3 +187,45 @@ table tr:hover {
     text-align: right;
     margin-top: 5px;
 }
+
+.pagination {
+    margin: 20px 0;
+}
+
+.pagination .page-info-container {
+    text-align: center;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.pagination .page-info {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.pagination .page-buttons {
+    text-align: center;
+    display: block;
+}
+
+.pagination .page-buttons a,
+.pagination .page-buttons span {
+    display: inline-block;
+    margin: 0 3px;
+    padding: 6px 12px;
+    text-decoration: none;
+    border: 1px solid #ccc;
+    color: #333;
+}
+
+.pagination .page-buttons .current {
+    background-color: #333;
+    color: #fff;
+    border-color: #333;
+}
+
+.pagination .page-buttons .dots {
+    padding: 6px 12px;
+    color: #999;
+    border: none;
+}
