@@ -405,7 +405,7 @@ foreach ($results as $row) {
                     <?php foreach ($results as $row): ?>
                         <tr>
                             <td>
-                                <a href="view.php/<?php echo urlencode($row['board_id']); ?>/<?php echo urlencode($row['thread_id']); ?>">
+                                <a href="view.php/<?php echo urlencode($row['board_id']); ?>/<?php echo urlencode($row['thread_id']); ?>/">
                                     <?php echo $row['title']; ?>
                                 </a>
                                 <div class="board-name"><?php echo $row['board_name']; ?></div>
