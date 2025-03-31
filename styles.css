@@ -1,231 +1,176 @@
 /* styles.css */
 
-/* スタイルの調整 */
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f2f2f2;
-    margin: 0;
-    padding: 20px;
-}
-
-.container {
-    max-width: 900px;
-    margin: auto;
-    background-color: #fff;
-    padding: 20px 25px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-h1 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 25px;
-}
-
-.search-form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.form-row {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.form-group label {
-    margin-bottom: 5px;
-    font-weight: bold;
-    display: none; /* ラベルは非表示にしてプレースホルダーを使用 */
-}
-
-.form-group select, .form-group input[type="text"] {
-    padding: 8px;
-    width: 100%;
-    max-width: 250px;
+/* 全体のリセットと基本設定 */
+* {
     box-sizing: border-box;
-}
-
-/* 検索ワード入力欄を大きく */
-#search_query {
-    flex: 1 1 60%;
-    max-width: none;
-}
-
-/* 検索ボタンを小さく */
-.search-button {
-    padding: 8px 12px;
-    background-color: #007BFF;
-    border: none;
-    color: #fff;
-    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    word-break: break-all;
+  }
+  
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    color: #333;
+    line-height: 1.6;
+  }
+  
+  /* コンテナ */
+  .container {
+    max-width: 960px;
+    margin: 1em auto;
+    padding: 1em;
+    background: #fff;
     border-radius: 4px;
-    height: 40px;
-    width: 100px;
-}
-
-.search-button:hover {
-    background-color: #0056b3;
-}
-
-.results {
-    margin-top: 30px;
-}
-
-.sort-options {
-    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  /* 見出し */
+  h1 {
+    text-align: center;
+    margin-bottom: 0.8em;
+    font-size: 1.8em;
+  }
+  
+  /* フォーム関連 */
+  .search-form {
+    margin-bottom: 1em;
+  }
+  
+  .form-row {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    align-items: center;
-}
-
-.sort-options label {
-    font-weight: bold;
-    margin-right: 5px;
-}
-
-/* タブスタイル */
-.tabs, .sub-tabs {
-    display: flex;
-    border-bottom: 1px solid #ccc;
-    margin-bottom: 15px;
     flex-wrap: wrap;
-}
-
-.tab, .sub-tab {
-    padding: 10px 20px;
-    cursor: pointer;
-    border: 1px solid #ccc;
-    border-bottom: none;
-    background-color: #f9f9f9;
-    margin-right: 5px;
-    border-radius: 5px 5px 0 0;
-    user-select: none;
-}
-
-.sub-tabs {
-    padding-left: 10px; /* インデント */
-}
-
-.tab.active, .sub-tab.active {
-    background-color: #fff;
-    font-weight: bold;
-}
-
-.tab a, .sub-tab a {
-    text-decoration: none;
-    color: inherit;
-    display: block;
+    gap: 0.5em;
+    margin-bottom: 0.5em;
+  }
+  
+  .form-group {
+    flex: 1;
+    min-width: 150px;
+  }
+  
+  /* 入力・セレクト */
+  .form-group input[type="text"],
+  .form-group input[type="number"],
+  .form-group select {
     width: 100%;
-    height: 100%;
-}
-
-.tab a:hover, .sub-tab a:hover {
-    background-color: #e9e9e9;
-}
-
-table {
+    padding: 0.4em;
+    font-size: 0.9em;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #fafafa;
+  }
+  
+  /* 検索ボタン */
+  .search-button {
+    padding: 0.4em 0.8em;
+    font-size: 0.9em;
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  
+  .search-button:hover {
+    background: #0056b3;
+  }
+  
+  /* 結果タイトル */
+  .results h2 {
+    font-size: 1.2em;
+    margin-bottom: 0.5em;
+  }
+  
+  /* テーブル */
+  table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 20px;
-}
-
-table th, table td {
-    border: 1px solid #ddd;
-    padding: 10px;
-    text-align: left;
-}
-
-table th {
-    background-color: #f8f8f8;
-}
-
-table tr:nth-child(even) {
-    background-color: #f9f9f9;
-}
-
-table tr:hover {
-    background-color: #f1f1f1;
-}
-
-.pagination {
-    text-align: center;
-    margin-top: 20px;
-}
-
-.pagination a, .pagination span {
-    display: inline-block;
-    margin: 0 5px;
-    padding: 8px 12px;
-    color: #007BFF;
-    text-decoration: none;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.pagination a:hover {
-    background-color: #e9e9e9;
-}
-
-.pagination .current {
-    background-color: #007BFF;
+    margin-bottom: 1em;
+  }
+  
+  table thead th {
+    background: #007bff;
     color: #fff;
-    border-color: #007BFF;
-}
-
-.board-name {
+    padding: 0.5em;
+    font-size: 0.9em;
+    text-align: left;
+  }
+  
+  table tbody td {
+    padding: 0.5em;
+    border-bottom: 1px solid #ddd;
+    font-size: 0.9em;
+  }
+  
+  /* マウスオーバーでハイライト */
+  table tbody tr:hover {
+    background: #f1f1f1;
+  }
+  
+  /* 結果内の補助情報 */
+  .info {
     font-size: 0.8em;
     color: #666;
-    text-align: right;
-    margin-top: 5px;
-}
-
-.pagination {
-    margin: 20px 0;
-}
-
-.pagination .page-info-container {
-    text-align: center;
-    margin-bottom: 10px;
-    display: block;
-}
-
-.pagination .page-info {
-    font-size: 18px;
-    font-weight: bold;
-}
-
-.pagination .page-buttons {
-    text-align: center;
-    display: block;
-}
-
-.pagination .page-buttons a,
-.pagination .page-buttons span {
+    margin-top: 0.2em;
+  }
+  
+  /* ページネーション */
+  .pagination {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 1em 0;
+  }
+  
+  .page-info-container {
+    margin-bottom: 0.5em;
+  }
+  
+  .page-buttons a,
+  .page-buttons span {
     display: inline-block;
-    margin: 0 3px;
-    padding: 6px 12px;
-    text-decoration: none;
+    padding: 0.3em 0.6em;
+    margin: 0 0.2em;
     border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.9em;
+    text-decoration: none;
     color: #333;
-}
-
-.pagination .page-buttons .current {
-    background-color: #333;
+  }
+  
+  .page-buttons a:hover {
+    background: #007bff;
     color: #fff;
-    border-color: #333;
-}
-
-.pagination .page-buttons .dots {
-    padding: 6px 12px;
-    color: #999;
-    border: none;
-}
+  }
+  
+  .page-buttons .current {
+    background: #007bff;
+    color: #fff;
+    border-color: #007bff;
+  }
+  
+  /* レスポンシブ対応 */
+  @media (max-width: 600px) {
+    .form-row {
+      flex-direction: column;
+    }
+    .form-group {
+      min-width: 100%;
+    }
+    h1 {
+      font-size: 1.6em;
+    }
+    .search-button {
+      font-size: 0.9em;
+    }
+    table thead th, table tbody td {
+      font-size: 0.8em;
+    }
+    .page-buttons a,
+    .page-buttons span {
+      font-size: 0.8em;
+      padding: 0.2em 0.4em;
+    }
+  }
+  
