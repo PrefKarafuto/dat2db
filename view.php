@@ -218,18 +218,22 @@ function displayThreadList($db, $board_id, $base_url) {
     $result = $stmt->execute();
     if (!$result) exitWithError("データベースエラーが発生しました。");
 
+    $stmt = $db->prepare("SELECT board_name FROM Boards WHERE board_id = :board_id");
+    $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
+    $board_name = $stmt->execute()->fetchArray(SQLITE3_ASSOC)['board_name'];
+
     ob_start();
     echo "<!DOCTYPE html>";
     echo "<html lang='ja'>";
     echo "<head>";
     echo "<meta charset='Shift_JIS'>";
     echo "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-    echo "<title>スレッド一覧</title>";
+    echo "<title>{$board_name}</title>";
     echo "<link rel='stylesheet' href='" . dirname($_SERVER['SCRIPT_NAME']) . "/thread.css'>";
     echo "</head>";
     echo "<body>";
     echo "<div class='container'>";
-    echo "<h1>" . htmlspecialchars($board_id, ENT_QUOTES, 'UTF-8') . " のスレッド一覧 ($total_threads)</h1>";
+    echo "<h1>" . htmlspecialchars($board_name, ENT_QUOTES, 'UTF-8') . "のスレッド一覧 ($total_threads)</h1>";
     echo "<p><a href='{$base_url}'>← 掲示板一覧に戻る</a></p>";
 
     if ($total_pages > 1) {
@@ -327,7 +331,7 @@ function displayBBSmenuJson($db, $base_url) {
         $order = 1;
         foreach ($boards as $board) {
             // 絶対URL生成：スクリプトと同じディレクトリにある board のディレクトリ名（board_id）を利用
-            $url = "http://" . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . "/" . $board['board_id'] . "/";
+            $url = "http://" . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . "/view.php/" . $board['board_id'] . "/";
             $category_content[] = array(
                 "url" => $url,
                 "category_name" => $category_name,
@@ -528,7 +532,7 @@ function parseResponseFormat($format, $db, $board_id, $thread_id) {
 function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') {
     $post_url = $base_url . '/' . $board_id . '/' . $thread_id . '/' . $row['post_order'];
     echo "<div class='response'>";
-    echo "<p><strong><a name=\"" . $row['post_order'] . "\" href=\"" . $post_url . "\">" . $row['post_order'] . "</a> - " . $row['name'] . "</strong>";
+    echo "<p><b><a name=\"" . $row['post_order'] . "\" href=\"" . $post_url . "\">" . $row['post_order'] . "</a> " . $row['name'] . "</b><span>";
     if (!empty($row['mail'])) {
         echo " (<a href='mailto:" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "'>" . htmlspecialchars($row['mail'], ENT_QUOTES, 'UTF-8') . "</a>)";
     }
@@ -536,7 +540,7 @@ function displayResponse($row, $base_url = '', $board_id = '', $thread_id = '') 
     if (!empty($row['id'])) {
         echo " ID:" . htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8');
     }
-    echo "</p>";
+    echo "</span></p>";
 
     $message = $row['message'];
     $message = linkifyReplies($message, $base_url, $board_id, $thread_id);

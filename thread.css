@@ -4,137 +4,139 @@
    基本リセットと全体設定
 -------------------------- */
 * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    word-break: break-all;
-  }
-  
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  word-break: break-all;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  padding: 20px;
+}
+
+/* -------------------------
+   コンテナ
+-------------------------- */
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 20px 30px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* -------------------------
+   ヘッディング
+-------------------------- */
+h1 {
+  font-size: 1.8em;
+  margin-bottom: 0.5em;
+  text-align: center;
+  color: #222;
+}
+
+/* -------------------------
+   ナビゲーションリンク
+-------------------------- */
+a {
+  color: #007bff;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------
+   レスポンス表示用スタイル
+-------------------------- */
+.response {
+  border-bottom: 1px solid #ddd;
+  padding: 10px 0;
+  margin-bottom: 10px;
+  transition: background-color 0.2s ease;
+}
+.response:last-child {
+  border-bottom: none;
+}
+.response p {
+  margin-bottom: 0.5em;
+  font-size: 0.9em;
+}
+.response p:first-of-type {
+  font-size: 0.8em;
+  color: green;
+}
+.response span {
+  color: gray;
+}
+.response a {
+  color: #007bff;
+}
+.response a:hover {
+  text-decoration: underline;
+}
+
+/* マウスオーバー時のハイライト */
+.response:hover {
+  background-color: #f9f9f9;
+}
+
+/* 補助情報（投稿日時、掲示板名など） */
+.info {
+  font-size: 0.9em;
+  color: #777;
+  margin-top: 0.3em;
+}
+
+/* -------------------------
+   ページネーション（必要に応じて）
+-------------------------- */
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+.pagination a,
+.pagination span {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 0.9em;
+  text-decoration: none;
+  color: #333;
+}
+.pagination a:hover {
+  background-color: #007bff;
+  color: #fff;
+}
+
+/* -------------------------
+   レスポンシブ対応
+-------------------------- */
+@media (max-width: 600px) {
   body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background-color: #f5f5f5;
-    color: #333;
-    line-height: 1.6;
-    padding: 20px;
+    padding: 10px;
   }
-  
-  /* -------------------------
-     コンテナ
-  -------------------------- */
   .container {
-    max-width: 800px;
-    margin: 0 auto;
-    background-color: #fff;
-    padding: 20px 30px;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 15px 20px;
   }
-  
-  /* -------------------------
-     ヘッディング
-  -------------------------- */
   h1 {
-    font-size: 1.8em;
-    margin-bottom: 0.5em;
-    text-align: center;
-    color: #222;
-  }
-  
-  /* -------------------------
-     ナビゲーションリンク
-  -------------------------- */
-  a {
-    color: #007bff;
-    text-decoration: none;
-  }
-  a:hover {
-    text-decoration: underline;
-  }
-  
-  /* -------------------------
-     レスポンス表示用スタイル
-  -------------------------- */
-  .response {
-    border-bottom: 1px solid #ddd;
-    padding: 10px 0;
-    margin-bottom: 10px;
-    transition: background-color 0.2s ease;
-  }
-  .response:last-child {
-    border-bottom: none;
-  }
-  .response p {
-    margin-bottom: 0.5em;
+    font-size: 1.5em;
   }
   .response p:first-of-type {
-    font-size: 1em;
-    font-weight: bold;
+    font-size: 0.95em;
   }
-  .response a {
-    color: #007bff;
-  }
-  .response a:hover {
-    text-decoration: underline;
-  }
-  
-  /* マウスオーバー時のハイライト */
-  .response:hover {
-    background-color: #f9f9f9;
-  }
-  
-  /* 補助情報（投稿日時、掲示板名など） */
   .info {
-    font-size: 0.9em;
-    color: #777;
-    margin-top: 0.3em;
-  }
-  
-  /* -------------------------
-     ページネーション（必要に応じて）
-  -------------------------- */
-  .pagination {
-    display: flex;
-    justify-content: center;
-    margin-top: 20px;
+    font-size: 0.8em;
   }
   .pagination a,
   .pagination span {
-    margin: 0 5px;
-    padding: 5px 10px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    font-size: 0.9em;
-    text-decoration: none;
-    color: #333;
+    font-size: 0.8em;
+    padding: 4px 8px;
   }
-  .pagination a:hover {
-    background-color: #007bff;
-    color: #fff;
-  }
-  
-  /* -------------------------
-     レスポンシブ対応
-  -------------------------- */
-  @media (max-width: 600px) {
-    body {
-      padding: 10px;
-    }
-    .container {
-      padding: 15px 20px;
-    }
-    h1 {
-      font-size: 1.5em;
-    }
-    .response p:first-of-type {
-      font-size: 0.95em;
-    }
-    .info {
-      font-size: 0.8em;
-    }
-    .pagination a,
-    .pagination span {
-      font-size: 0.8em;
-      padding: 4px 8px;
-    }
-  }
-  
+}
