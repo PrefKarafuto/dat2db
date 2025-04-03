@@ -72,6 +72,9 @@ if ($search_query !== '') {
         case 'title':
             $fts_query = 'thread_title:' . $search_query;
             break;
+        case 'name':
+            $fts_query = 'name:' . $search_query;
+            break;
         case 'full':
         default:
             $fts_query = 'thread_title:' . $search_query . ' OR message:' . $search_query . ' OR name:' . $search_query . ' OR id:' . $search_query;
@@ -203,7 +206,7 @@ sort($categories);
                         <option value="title" <?php if ($search_type === 'title') echo 'selected'; ?>>スレタイ検索</option>
                         <option value="message" <?php if ($search_type === 'message') echo 'selected'; ?>>本文検索</option>
                         <option value="id" <?php if ($search_type === 'id') echo 'selected'; ?>>ID検索</option>
-                        <option value="full" <?php if ($search_type === 'full') echo 'selected'; ?>>フル検索</option>
+                        <option value="name" <?php if ($search_type === 'full') echo 'selected'; ?>>名前検索</option>
                     </select>
                 </div>
                 <div class="form-group">
