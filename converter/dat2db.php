@@ -1,28 +1,68 @@
 <?php 
 // PHP拡張のMeCabモジュールが利用可能かチェック
 if (!class_exists('MeCab_Tagger')) {
-    exit("エラー: PHP用MeCab拡張モジュールが利用できません。インストールしてください。\n");
+    echo "警告: PHP用MeCab拡張モジュールが利用できません。カスタムトークナイザーを使用します。\n";
+    $use_default_tokenizer = true;
+} else {
+    $use_default_tokenizer = false;
 }
 
 /**
- * MeCab拡張モジュールを利用してテキストを分かち書きする関数
+ * テキストを分かち書きする関数
+ *
+ * MeCab拡張モジュールが利用できる場合はMeCabを使用し、
+ * 利用できない場合は以下のカスタム実装により、  
+ * 空白文字・句読点で区切るunicode61に加え、  
+ * 漢字、ひらがな、カタカナ、全角英字・全角数字、半角英字、半角数字、ASCII記号などの区切りでトークン分割する
  *
  * @param string $text 解析対象のテキスト
- * @return string 分かち書き済みテキスト（単語間はスペース区切り）
+ * @return string 分かち書き済みテキスト（各トークンはスペース区切り）
  */
 function tokenizeText($text) {
-    $tagger = new MeCab_Tagger();
-    $node = $tagger->parseToNode($text);
-    $tokens = [];
-    // BOS/EOSノードは除外
-    for (; $node; $node = $node->getNext()) {
-        if ($node->getStat() == MeCab::MECAB_BOS_NODE || $node->getStat() == MeCab::MECAB_EOS_NODE) {
-            continue;
+    global $use_default_tokenizer;
+    if ($use_default_tokenizer) {
+        // カスタムトークナイザー実装
+        // まず前後の空白を除去
+        $text = trim($text);
+        // 以下の正規表現は、各文字種ごとの連続部分をひとまとまりのトークンとする
+        // ・\p{Han}      : 漢字
+        // ・\p{Hiragana} : ひらがな
+        // ・\p{Katakana} : カタカナ
+        // ・[Ａ-Ｚａ-ｚ]+: 全角英字（※全角小文字・大文字）
+        // ・[０-９]+    : 全角数字
+        // ・[A-Za-z]+   : 半角英字
+        // ・[0-9]+      : 半角数字
+        // ・[\p{P}\p{S}]+ : Unicode上の句読点・記号（ASCII含む）
+        $pattern = '/
+            (\p{Han}+)         |   # 漢字
+            (\p{Hiragana}+)    |   # ひらがな
+            (\p{Katakana}+)    |   # カタカナ
+            ([Ａ-Ｚａ-ｚ]+)     |   # 全角英字
+            ([０-９]+)         |   # 全角数字
+            ([A-Za-z]+)        |   # 半角英字
+            ([0-9]+)           |   # 半角数字
+            ([\p{P}\p{S}]+)        # 句読点・記号（ASCII含む）
+        /xu';
+        preg_match_all($pattern, $text, $matches);
+        $tokens = $matches[0];
+        return implode(' ', $tokens);
+    } else {
+        // MeCabが利用可能な場合はMeCabを使用
+        $tagger = new MeCab_Tagger();
+        $node = $tagger->parseToNode($text);
+        $tokens = [];
+        // BOS/EOSノードは除外
+        for (; $node; $node = $node->getNext()) {
+            if ($node->getStat() == MeCab::MECAB_BOS_NODE || $node->getStat() == MeCab::MECAB_EOS_NODE) {
+                continue;
+            }
+            $tokens[] = $node->getSurface();
         }
-        $tokens[] = $node->getSurface();
+        return implode(' ', $tokens);
     }
-    return implode(' ', $tokens);
 }
+
+/* 以下は従来のデータベース接続、テーブル作成、FTSインデックス作成等の処理 */
 
 // データベース接続の設定
 $db = new SQLite3('../bbs_log.db');
@@ -61,7 +101,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS Posts (
 )");
 
 // FTS仮想テーブルの作成（FTS5を使用）
-// こちらには形態素解析済みのテキストを登録し、全文検索用とする
+// 形態素解析済みのテキストを登録し、全文検索用とする
 $db->exec("CREATE VIRTUAL TABLE IF NOT EXISTS Posts_fts USING fts5(
     board_id,
     thread_id,
@@ -271,10 +311,10 @@ foreach ($category_dirs as $category_dir) {
                 $stmt->bindValue(':response_count', $response_count, SQLITE3_INTEGER);
                 $stmt->execute();
             }
-            // プログレスバーを更新（掲示板内のdatファイル読み込み進捗）
+            // プログレスバー更新（掲示板内のdatファイル読み込み進捗）
             show_progress($thread_count, $thread_num, $board_id, $start_time);
         }
-        // Boardsテーブルのthread_countを更新
+        // Boardsテーブルのthread_count更新
         $stmt = $db->prepare("UPDATE Boards SET thread_count = :thread_count WHERE board_id = :board_id");
         $stmt->bindValue(':thread_count', $thread_count, SQLITE3_INTEGER);
         $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
@@ -288,12 +328,12 @@ echo "\nFTSインデックス初期化中・・・";
 $db->exec("DELETE FROM Posts_fts");
 echo "完了\n";
 
-// FTS用インデックス作成：Postsテーブルから各投稿を取得し、形態素解析してFTSテーブルへ挿入
+// FTS用インデックス作成：Postsテーブルから各投稿を取得し、トークナイズしてFTSテーブルへ挿入
 $result = $db->query("SELECT p.board_id, p.thread_id, p.post_order, p.message, p.name, p.id, t.title AS thread_title
                        FROM Posts p
                        LEFT JOIN Threads t ON p.board_id = t.board_id AND p.thread_id = t.thread_id");
 
-// 全件数を取得（進捗表示用）
+// 全件数取得（進捗表示用）
 $totalResult = $db->query("SELECT COUNT(*) as count FROM Posts p LEFT JOIN Threads t ON p.board_id = t.board_id AND p.thread_id = t.thread_id");
 $totalRow = $totalResult->fetchArray(SQLITE3_ASSOC);
 $total = $totalRow['count'];
@@ -305,17 +345,10 @@ $fts_done = 0;
 $fts_start_time = null;
 
 while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-    // messageの形態素解析
-    $original_message = $row['message'];
-    $tokenized_message = tokenizeText($original_message);
-    
-    // nameの形態素解析
-    $original_name = $row['name'];
-    $tokenized_name = tokenizeText($original_name);
-    
-    // thread_titleの形態素解析
-    $original_thread_title = $row['thread_title'];
-    $tokenized_thread_title = tokenizeText($original_thread_title);
+    // message, name, thread_titleをそれぞれカスタムトークナイザーで分割
+    $tokenized_message = tokenizeText($row['message']);
+    $tokenized_name = tokenizeText($row['name']);
+    $tokenized_thread_title = tokenizeText($row['thread_title']);
     
     $insertStmt->bindValue(':board_id', $row['board_id'], SQLITE3_TEXT);
     $insertStmt->bindValue(':thread_id', $row['thread_id'], SQLITE3_INTEGER);
