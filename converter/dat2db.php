@@ -1,4 +1,29 @@
 <?php 
+// PHP拡張のMeCabモジュールが利用可能かチェック
+if (!class_exists('MeCab_Tagger')) {
+    exit("エラー: PHP用MeCab拡張モジュールが利用できません。インストールしてください。\n");
+}
+
+/**
+ * MeCab拡張モジュールを利用してテキストを分かち書きする関数
+ *
+ * @param string $text 解析対象のテキスト
+ * @return string 分かち書き済みテキスト（単語間はスペース区切り）
+ */
+function tokenizeText($text) {
+    $tagger = new MeCab_Tagger();
+    $node = $tagger->parseToNode($text);
+    $tokens = [];
+    // BOS/EOSノードは除外
+    for (; $node; $node = $node->getNext()) {
+        if ($node->getStat() == MeCab::MECAB_BOS_NODE || $node->getStat() == MeCab::MECAB_EOS_NODE) {
+            continue;
+        }
+        $tokens[] = $node->getSurface();
+    }
+    return implode(' ', $tokens);
+}
+
 // データベース接続の設定
 $db = new SQLite3('../bbs_log.db');
 
@@ -29,14 +54,14 @@ $db->exec("CREATE TABLE IF NOT EXISTS Posts (
     date TEXT,
     time TEXT,
     id TEXT,
-    message TEXT,
+    message TEXT,  -- ユーザー表示用の元のメッセージ
     PRIMARY KEY (board_id, thread_id, post_order),
     FOREIGN KEY (board_id) REFERENCES Boards(board_id),
     FOREIGN KEY (board_id, thread_id) REFERENCES Threads(board_id, thread_id)
 )");
 
 // FTS仮想テーブルの作成（FTS5を使用）
-// 投稿内容(message)、投稿者名(name)、投稿者ID(id)、スレッドタイトル(thread_title)を全文検索対象とする
+// こちらには形態素解析済みのテキストを登録し、全文検索用とする
 $db->exec("CREATE VIRTUAL TABLE IF NOT EXISTS Posts_fts USING fts5(
     board_id,
     thread_id,
@@ -47,7 +72,7 @@ $db->exec("CREATE VIRTUAL TABLE IF NOT EXISTS Posts_fts USING fts5(
     thread_title
 )");
 
-// プログレスバーを表示する関数
+// プログレスバーを表示する関数（掲示板読み込み用）
 function show_progress($done, $total, $board_id, &$start_time, $size = 30) {
     if ($done > $total) return;
     if ($start_time === null) $start_time = time();
@@ -73,17 +98,33 @@ function show_progress($done, $total, $board_id, &$start_time, $size = 30) {
     flush();
 }
 
+// プログレスバーを表示する関数（FTSインデックス作成用）
+function show_progress_fts($done, $total, &$start_time, $size = 30) {
+    if ($done > $total) return;
+    if ($start_time === null) $start_time = time();
+
+    $perc = (double)($done / $total);
+    $bar = floor($perc * $size);
+
+    $status_bar = "\rFTSインデックス作成中・・・[";
+    $status_bar .= str_repeat("=", $bar);
+    if ($bar < $size) {
+        $status_bar .= ">" . str_repeat(" ", $size - $bar);
+    } else {
+        $status_bar .= "=";
+    }
+
+    $disp = number_format($perc * 100, 0);
+    $status_bar .= "] $disp%  $done/$total";
+
+    if ($done == $total) {
+        $status_bar .= " 完了\n";
+    }
+    echo "$status_bar  ";
+    flush();
+}
+
 // 設定ファイルのパス（board_config.phpの新形式に対応）
-// board_config.phpの例:
-// return [
-//     'ent' => [                     // カテゴリID（ディレクトリ名）
-//         'name' => 'エンタメ',        // カテゴリ名（表示名）
-//         'boards' => [              // このカテゴリに属する掲示板
-//             'movies' => '映画掲示板',
-//             'music'  => '音楽掲示板',
-//         ],
-//     ],
-// ];
 $config_file = 'board_config.php';
 if (!file_exists($config_file)) {
     exit("エラー: 設定ファイル '{$config_file}' が存在しません。設定ファイルを作成してください。\n");
@@ -137,7 +178,8 @@ foreach ($category_dirs as $category_dir) {
         }
         
         // Boardsテーブルに情報を挿入または更新
-        $stmt = $db->prepare("INSERT OR REPLACE INTO Boards (board_id, board_name, category_id, category_name) VALUES (:board_id, :board_name, :category_id, :category_name)");
+        $stmt = $db->prepare("INSERT OR REPLACE INTO Boards (board_id, board_name, category_id, category_name)
+                              VALUES (:board_id, :board_name, :category_id, :category_name)");
         $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
         $stmt->bindValue(':board_name', $board_name, SQLITE3_TEXT);
         $stmt->bindValue(':category_id', $category_id, SQLITE3_TEXT);
@@ -201,7 +243,7 @@ foreach ($category_dirs as $category_dir) {
                         $id = '';
                     }
                     
-                    // Postsテーブルへ投稿情報のINSERTまたは更新
+                    // Postsテーブルへ投稿情報を挿入（表示用は元のメッセージそのまま）
                     $stmt = $db->prepare("INSERT OR REPLACE INTO Posts (board_id, thread_id, post_order, name, mail, date, time, id, message)
                                           VALUES (:board_id, :thread_id, :post_order, :name, :mail, :date, :time, :id, :message)");
                     $stmt->bindValue(':board_id', $board_id, SQLITE3_TEXT);
@@ -219,7 +261,7 @@ foreach ($category_dirs as $category_dir) {
                 }
                 fclose($file);
                 
-                // Threadsテーブルへスレッド情報のINSERTまたは更新
+                // Threadsテーブルへスレッド情報を挿入または更新
                 $response_count = $post_order - 1;
                 $stmt = $db->prepare("INSERT OR REPLACE INTO Threads (board_id, thread_id, title, response_count)
                                       VALUES (:board_id, :thread_id, :title, :response_count)");
@@ -229,7 +271,7 @@ foreach ($category_dirs as $category_dir) {
                 $stmt->bindValue(':response_count', $response_count, SQLITE3_INTEGER);
                 $stmt->execute();
             }
-            // プログレスバーを更新
+            // プログレスバーを更新（掲示板内のdatファイル読み込み進捗）
             show_progress($thread_count, $thread_num, $board_id, $start_time);
         }
         // Boardsテーブルのthread_countを更新
@@ -242,14 +284,52 @@ foreach ($category_dirs as $category_dir) {
 }
 
 // FTSテーブルの再構築
-// 重複防止のため、一度初期化してからPostsテーブルとThreadsテーブルをJOINしてデータを反映します。
-echo "\nFTSインデックスを作成中・・・\n";
+echo "\nFTSインデックス初期化中・・・";
 $db->exec("DELETE FROM Posts_fts");
-$db->exec("INSERT INTO Posts_fts (board_id, thread_id, post_order, message, name, id, thread_title)
-           SELECT p.board_id, p.thread_id, p.post_order, p.message, p.name, p.id, t.title
-           FROM Posts p
-           LEFT JOIN Threads t ON p.board_id = t.board_id AND p.thread_id = t.thread_id");
+echo "完了\n";
 
+// FTS用インデックス作成：Postsテーブルから各投稿を取得し、形態素解析してFTSテーブルへ挿入
+$result = $db->query("SELECT p.board_id, p.thread_id, p.post_order, p.message, p.name, p.id, t.title AS thread_title
+                       FROM Posts p
+                       LEFT JOIN Threads t ON p.board_id = t.board_id AND p.thread_id = t.thread_id");
+
+// 全件数を取得（進捗表示用）
+$totalResult = $db->query("SELECT COUNT(*) as count FROM Posts p LEFT JOIN Threads t ON p.board_id = t.board_id AND p.thread_id = t.thread_id");
+$totalRow = $totalResult->fetchArray(SQLITE3_ASSOC);
+$total = $totalRow['count'];
+
+$insertStmt = $db->prepare("INSERT INTO Posts_fts (board_id, thread_id, post_order, message, name, id, thread_title)
+                            VALUES (:board_id, :thread_id, :post_order, :message, :name, :id, :thread_title)");
+
+$fts_done = 0;
+$fts_start_time = null;
+
+while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    // messageの形態素解析
+    $original_message = $row['message'];
+    $tokenized_message = tokenizeText($original_message);
+    
+    // nameの形態素解析
+    $original_name = $row['name'];
+    $tokenized_name = tokenizeText($original_name);
+    
+    // thread_titleの形態素解析
+    $original_thread_title = $row['thread_title'];
+    $tokenized_thread_title = tokenizeText($original_thread_title);
+    
+    $insertStmt->bindValue(':board_id', $row['board_id'], SQLITE3_TEXT);
+    $insertStmt->bindValue(':thread_id', $row['thread_id'], SQLITE3_INTEGER);
+    $insertStmt->bindValue(':post_order', $row['post_order'], SQLITE3_INTEGER);
+    $insertStmt->bindValue(':message', $tokenized_message, SQLITE3_TEXT);
+    $insertStmt->bindValue(':name', $tokenized_name, SQLITE3_TEXT);
+    $insertStmt->bindValue(':id', $row['id'], SQLITE3_TEXT);
+    $insertStmt->bindValue(':thread_title', $tokenized_thread_title, SQLITE3_TEXT);
+    $insertStmt->execute();
+    
+    $fts_done++;
+    show_progress_fts($fts_done, $total, $fts_start_time);
+}
+
+echo "\nデータベースへの移行とFTSインデックスの作成が完了しました。\n";
 $db->close();
-echo "データベースへの移行とFTSインデックスの作成が完了しました。\n";
 ?>
